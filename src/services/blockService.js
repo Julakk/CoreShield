@@ -35,15 +35,26 @@ async function blockViaCrowdSec(ip, { duration = '4h', reason = 'manual block vi
 }
 
 /**
- * Block via iptables directly. Only used if BLOCK_METHOD=iptables.
- * Uses execFile with an argument array — ip is never concatenated into a
- * shell string, so it cannot break out of the argument regardless of content.
+ * Block via iptables. Only used if BLOCK_METHOD=iptables.
+ *
+ * Rather than calling `iptables` directly as root, this calls a single,
+ * narrowly-scoped shell script (scripts/manage_firewall.sh) via sudo. The
+ * script does its own strict IP validation and only ever invokes
+ * iptables/ip6tables with a fixed, small set of flags — see the sudoers
+ * config in scripts/coreshield-sudoers.example for why this bounds the
+ * blast radius even if the Node process itself were compromised.
+ *
+ * Uses execFile with an argument array throughout — ip is never
+ * concatenated into a shell string, so it cannot break out of the
+ * argument regardless of content. This is defense-in-depth on top of the
+ * script's own validation, not a substitute for it.
  */
 async function blockViaIptables(ip) {
-  await safeExec('iptables', ['-C', 'INPUT', '-s', ip, '-j', 'DROP']).catch(async (checkErr) => {
-    // -C (check) fails if rule doesn't exist yet — that's expected, so we add it
-    await safeExec('iptables', ['-I', 'INPUT', '-s', ip, '-j', 'DROP']);
-  });
+  await safeExec(config.firewall.sudoBin, [
+    config.firewall.scriptPath,
+    'block',
+    ip,
+  ]);
   return { method: 'iptables', ip };
 }
 
@@ -70,7 +81,11 @@ async function unblockIp(ip) {
   }
 
   if (config.blockMethod === 'iptables') {
-    await safeExec('iptables', ['-D', 'INPUT', '-s', ip, '-j', 'DROP']);
+    await safeExec(config.firewall.sudoBin, [
+      config.firewall.scriptPath,
+      'unblock',
+      ip,
+    ]);
     logger.info('IP unblocked via iptables', { ip });
     return { method: 'iptables', ip, unblocked: true };
   }

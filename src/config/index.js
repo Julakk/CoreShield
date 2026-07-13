@@ -34,6 +34,15 @@ const config = {
 
   blockMethod: process.env.BLOCK_METHOD || 'crowdsec', // 'crowdsec' | 'iptables'
 
+  firewall: {
+    // Absolute path to manage_firewall.sh. Must match the path in your
+    // sudoers rule exactly (see scripts/coreshield-sudoers.example).
+    scriptPath: process.env.FIREWALL_SCRIPT_PATH || '/opt/coreshield/scripts/manage_firewall.sh',
+    // 'sudo' in production (script runs as root via scoped sudoers rule);
+    // can be overridden for local dev where the script is run directly.
+    sudoBin: process.env.FIREWALL_SUDO_BIN || 'sudo',
+  },
+
   corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:3000')
     .split(',')
     .map((s) => s.trim()),
