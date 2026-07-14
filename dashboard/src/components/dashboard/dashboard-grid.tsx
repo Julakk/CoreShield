@@ -3,6 +3,7 @@
 import { StatCard } from "@/components/dashboard/stat-card";
 import { TrafficChartCard, TrafficPoint } from "@/components/dashboard/traffic-chart-card";
 import { useStats } from "@/lib/use-stats";
+import { formatNumber } from "@/lib/format";
 import { ShieldAlert, Zap, Globe2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -39,7 +40,7 @@ export function DashboardGrid() {
             value={
               loading
                 ? "—"
-                : (stats?.attacksBlockedLast24h ?? 0).toLocaleString()
+                : formatNumber(stats?.attacksBlockedLast24h ?? 0)
             }
             icon={ShieldAlert}
             accent="danger"
@@ -63,14 +64,14 @@ export function DashboardGrid() {
           value={
             loading
               ? "—"
-              : (stats?.traffic.requestsLast24h ?? 0).toLocaleString()
+              : formatNumber(stats?.traffic.requestsLast24h ?? 0)
           }
           icon={Globe2}
           subtext="Last 24 hours"
         />
         <StatCard
           title="Active IP Blocks"
-          value={loading ? "—" : (stats?.activeBlocks ?? 0).toLocaleString()}
+          value={loading ? "—" : formatNumber(stats?.activeBlocks ?? 0)}
           icon={ShieldAlert}
           accent="default"
           subtext="Currently enforced"

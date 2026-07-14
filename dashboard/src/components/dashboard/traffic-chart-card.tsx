@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 import {
   AreaChart,
   Area,
@@ -48,7 +49,7 @@ function CustomTooltip({
             className="w-1.5 h-1.5 rounded-full"
             style={{ backgroundColor: entry.color }}
           />
-          {entry.name}: {entry.value.toLocaleString()}
+          {entry.name}: {formatNumber(entry.value)}
         </p>
       ))}
     </div>
@@ -70,7 +71,7 @@ export function TrafficChartCard({ data }: { data: TrafficPoint[] }) {
             Requests over the last 24 hours
           </CardDescription>
         </div>
-        <Badge variant="accent">{totalRequests.toLocaleString()} total</Badge>
+        <Badge variant="accent">{formatNumber(totalRequests)} total</Badge>
       </CardHeader>
       <CardContent className="pt-4">
         <div className="h-64 w-full">
