@@ -21,6 +21,13 @@ const config = {
     expiresIn: process.env.JWT_EXPIRES_IN || '8h',
   },
 
+  // Single-admin auth for small/solo deployments. For multi-user setups,
+  // replace src/services/authService.js with a real user store.
+  admin: {
+    username: process.env.ADMIN_USERNAME || 'admin',
+    password: process.env.ADMIN_PASSWORD || '',
+  },
+
   nginx: {
     sitesAvailable: required('NGINX_SITES_AVAILABLE', '/etc/nginx/sites-available'),
     sitesEnabled: required('NGINX_SITES_ENABLED', '/etc/nginx/sites-enabled'),
@@ -55,6 +62,10 @@ const config = {
 
 if (config.env === 'production' && config.jwt.secret.length < 32) {
   throw new Error('JWT_SECRET must be at least 32 characters in production');
+}
+
+if (config.env === 'production' && !config.admin.password) {
+  throw new Error('ADMIN_PASSWORD must be set in production');
 }
 
 module.exports = config;

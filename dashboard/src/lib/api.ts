@@ -60,6 +60,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const coreShieldApi = {
+  login: (username: string, password: string) =>
+    request<{ token: string; expiresIn: string }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
   getStats: () => request<StatsResponse>("/stats"),
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
   addDomain: (domain: string, upstream?: string) =>
