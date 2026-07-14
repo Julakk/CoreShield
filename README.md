@@ -1,98 +1,60 @@
 # CoreShield
 
-A Node.js (Express) backend API for a security dashboard. CoreShield lets you manage protected domains (via Nginx reverse-proxy configs), block/unblock IP addresses (via CrowdSec or iptables), and pull basic traffic/attack statistics — all through a small, authenticated REST API.
+A security dashboard for managing server-side protections: Nginx-backed domain protection, IP blocking (CrowdSec or iptables), and traffic/attack statistics — with a Node.js/Express API and a Next.js dashboard.
 
-## Features
+This is a monorepo with two projects:
+## Backend (`/`)
 
+Express API for managing protected domains, blocking IPs, and reporting stats.
+
+### Features
 - **Domain management** — register a domain, auto-generate an Nginx reverse-proxy vhost, test the config, and reload Nginx.
-- **IP blocking** — block or unblock an IP address via the CrowdSec Local API or directly via `iptables`.
-- **Statistics** — basic traffic and blocked-attack counts.
+- **IP blocking** — block/unblock via CrowdSec Local API or `iptables` (routed through a sudo-scoped shell script, see `scripts/`).
+- **Statistics** — traffic and blocked-attack counts.
 - **JWT authentication** with role-based authorization (`admin`, `operator`).
-- **Security-first design**:
-  - All system commands run via `execFile` (no shell interpolation) — command injection is not possible through user input.
-  - Strict allow-list validation for domains and IPs.
-  - Refuses to block private/loopback IP ranges.
-  - `nginx -t` runs before every reload, so a bad config never goes live.
-  - Helmet, CORS allow-list, and rate limiting on all routes.
-  - Audit logging via Winston (`logs/audit.log`).
+- **Security-first design** — commands run via `execFile` (no shell interpolation), strict allow-list validation for domains/IPs, refuses to block private/loopback ranges, `nginx -t` runs before every reload, Helmet + CORS allow-list + rate limiting, audit logging via Winston.
 
-## Project structure
-## Requirements
-
-- Node.js 18+
-- Nginx (for domain management features)
-- CrowdSec with a Local API bouncer, **or** `iptables` with root privileges (for IP blocking)
-
-## Setup
-
+### Setup
 ```bash
 npm install
 cp .env.example .env
-```
-
-Edit `.env` and fill in your own values — at minimum set a strong `JWT_SECRET` (32+ characters).
-
-```bash
+# edit .env — set a strong JWT_SECRET (32+ chars) and your Nginx/CrowdSec config
 npm start        # production
-npm run dev       # with nodemon, auto-restart
+npm run dev       # local dev, auto-restart
 ```
 
-The API listens on `PORT` (default `4000`) under the `/api/v1` prefix.
+API listens on `PORT` (default `4000`) under `/api/v1`. See inline comments in `.env.example` for all variables.
 
-## Environment variables
+### Firewall script
+`scripts/manage_firewall.sh` is a standalone, strictly-validated script for blocking/unblocking a single IP via `iptables`/`ip6tables`. It's meant to be run via a narrowly-scoped `sudo` rule (see `scripts/coreshield-sudoers.example`) so the Node process itself never needs root. See that file for install steps.
 
-See `.env.example` for the full list. Key ones:
+## Dashboard (`/dashboard`)
 
-| Variable | Description |
-|---|---|
-| `JWT_SECRET` | Secret used to sign/verify auth tokens. Required, 32+ chars in production. |
-| `NGINX_SITES_AVAILABLE` / `NGINX_SITES_ENABLED` | Paths to your Nginx config directories. |
-| `NGINX_RELOAD_CMD` | Command used to reload Nginx (e.g. `systemctl reload nginx`). |
-| `BLOCK_METHOD` | `crowdsec` or `iptables`. |
-| `CROWDSEC_BOUNCER_API` / `CROWDSEC_BOUNCER_API_KEY` | CrowdSec Local API connection details. |
-| `CORS_ORIGIN` | Comma-separated list of allowed dashboard origins. |
-| `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | API rate limiting. |
+Next.js + Tailwind + TypeScript dark-mode dashboard UI.
 
-**Never commit `.env`.** It's already excluded via `.gitignore`.
+### Features
+- Sidebar navigation: Account Home, Domains, Security, Analytics.
+- Account Home: Web Traffic chart (Recharts), Attack Threats Blocked, Cache Rate, and supporting stat cards.
+- Typed fetch client (`lib/api.ts`) wired to the backend's `/api/v1` routes, with a polling hook (`lib/use-stats.ts`) that gracefully falls back to demo data if the backend is unreachable.
 
-## API
-
-All endpoints below are under `/api/v1` and (except `/health`) require `Authorization: Bearer <JWT>`.
-
-| Method | Path | Role | Description |
-|---|---|---|---|
-| GET | `/health` | — | Liveness check |
-| GET | `/domains` | any authenticated | List protected domains |
-| POST | `/domains` | admin, operator | Add a domain (writes Nginx vhost, tests config, reloads) |
-| DELETE | `/domains/:domain` | admin | Remove a domain |
-| POST | `/security/block-ip` | admin, operator | Block an IP address |
-| DELETE | `/security/block-ip/:ip` | admin, operator | Unblock an IP address |
-| GET | `/stats` | any authenticated | Traffic and blocked-attack statistics |
-
-### Example: add a domain
-
+### Setup
 ```bash
-curl -X POST http://localhost:4000/api/v1/domains \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"domain": "app.example.com", "upstream": "127.0.0.1:8080"}'
+cd dashboard
+npm install
+cp .env.example .env.local
+# edit .env.local — point NEXT_PUBLIC_API_URL at your running backend
+npm run dev
 ```
 
-### Example: block an IP
-
-```bash
-curl -X POST http://localhost:4000/api/v1/security/block-ip \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"ip": "203.0.113.42", "duration": "4h", "reason": "brute force"}'
-```
+See `dashboard/CHANGELOG.md` for version history and `dashboard/README.md` for more detail.
 
 ## Production notes
 
-- Replace `domainStore.js` (in-memory) with a real database.
-- Run the Node process under a **least-privilege user**, with sudoers rules scoped only to the exact `nginx`/`iptables` commands it needs — do not run as root.
-- Wire `statsService.js`'s traffic field to a real metrics source (Prometheus, GoAccess, etc.).
-- This project does not include a login/token-issuance endpoint — it assumes JWTs are issued by an existing auth service.
+- Replace the in-memory domain store (`src/services/domainStore.js`) with a real database.
+- Run the backend under a **least-privilege system user**, granted access only to the specific firewall script via sudoers — never run as root.
+- Never commit `.env` or `.env.local` — both are gitignored. Keep real secrets only on the server that runs the service, not on a development machine.
+- Wire the dashboard's placeholder stats (Cache Rate, Protected Domains count, Avg. Response Time) to real backend fields before going live.
+- This project doesn't include a login/token-issuance endpoint — it assumes JWTs are issued by an existing auth service.
 
 ## License
 
