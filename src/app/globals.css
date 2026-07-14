@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+:root {
+  /* Dark-mode-first. This dashboard is designed to live in dark mode by
+     default, the way most security/network operations tooling does. */
+  --background: #0a0b0d;
+  --background-elevated: #101216;
+  --surface: #14161b;
+  --surface-hover: #1a1d23;
+  --border: #22252b;
+  --border-subtle: #1a1c21;
+
+  --foreground: #e8e9eb;
+  --foreground-muted: #9a9da3;
+  --foreground-subtle: #6b6e75;
+
+  --accent: #22e5c9;        /* signal-cyan — CoreShield's "protected/active" color, used sparingly */
+  --accent-foreground: #0a0b0d;
+  --accent-muted: #22e5c91a;
+
+  --success: #22c55e;
+  --success-muted: #22c55e1a;
+  --warning: #eab308;
+  --warning-muted: #eab3081a;
+  --danger: #ef4444;
+  --danger-muted: #ef44441a;
+
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-muted: var(--accent-muted);
+
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-muted: var(--warning-muted);
+  --color-danger: var(--danger);
+  --color-danger-muted: var(--danger-muted);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Thin, unobtrusive scrollbars to match the enterprise-tool feel */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid var(--background);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-subtle);
+}
