@@ -1,0 +1,24 @@
+# /etc/sudoers.d/coreshield-firewall
+#
+# Grants the coreshield service user permission to run ONLY this exact
+# script, with no password prompt (required for a non-interactive API),
+# and nothing else as root.
+#
+# Install with:
+#   sudo visudo -f /etc/sudoers.d/coreshield-firewall
+#   sudo chmod 440 /etc/sudoers.d/coreshield-firewall
+#
+# Replace "coreshield" with the actual unprivileged system user that runs
+# your Node process (create one with: sudo useradd -r -s /usr/sbin/nologin coreshield)
+
+coreshield ALL=(root) NOPASSWD: /opt/coreshield/scripts/manage_firewall.sh block *
+coreshield ALL=(root) NOPASSWD: /opt/coreshield/scripts/manage_firewall.sh unblock *
+
+# Why this is safe:
+# - The user can ONLY run this specific script at this specific absolute path.
+# - They cannot run iptables directly, cannot run any other binary as root,
+#   and cannot pass shell metacharacters through sudo to alter what's executed
+#   (sudo does not invoke a shell around the target command unless you
+#   explicitly configure use_pty/shell — we don't).
+# - Even if the Node app were fully compromised, an attacker gains only
+#   "block/unblock an IP via this script's own validation" — not a root shell.
