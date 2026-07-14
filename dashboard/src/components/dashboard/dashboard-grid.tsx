@@ -7,8 +7,6 @@ import { formatNumber } from "@/lib/format";
 import { ShieldAlert, Zap, Globe2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-// Demo hourly breakdown for the chart — swap for a real time-series
-// endpoint on the backend (e.g. GET /stats/traffic?range=24h) when ready.
 const DEMO_TRAFFIC: TrafficPoint[] = [
   { time: "00:00", requests: 12400, blocked: 210 },
   { time: "03:00", requests: 9800, blocked: 180 },
@@ -19,6 +17,16 @@ const DEMO_TRAFFIC: TrafficPoint[] = [
   { time: "18:00", requests: 26700, blocked: 480 },
   { time: "21:00", requests: 19300, blocked: 310 },
 ];
+
+function displayValue(
+  loading: boolean,
+  value: number | null | undefined,
+  suffix = ""
+): string {
+  if (loading) return "—";
+  if (value === null || value === undefined) return "N/A";
+  return `${formatNumber(value)}${suffix}`;
+}
 
 export function DashboardGrid() {
   const { stats, loading, error, isDemoData } = useStats();
@@ -37,23 +45,21 @@ export function DashboardGrid() {
         <div className="grid grid-cols-1 gap-4">
           <StatCard
             title="Attack Threats Blocked"
-            value={
-              loading
-                ? "—"
-                : formatNumber(stats?.attacksBlockedLast24h ?? 0)
-            }
+            value={displayValue(loading, stats?.attacksBlockedLast24h)}
             icon={ShieldAlert}
             accent="danger"
-            trend={{ value: "12.4%", direction: "up", positiveDirection: "up" }}
             subtext="Last 24 hours"
           />
           <StatCard
             title="Cache Rate"
-            value="94.2%"
+            value={displayValue(loading, stats?.cacheRate, "%")}
             icon={Zap}
             accent="accent"
-            trend={{ value: "1.1%", direction: "down", positiveDirection: "up" }}
-            subtext="Origin offload"
+            subtext={
+              stats?.cacheRate == null && !loading
+                ? "Not configured yet"
+                : "Origin offload"
+            }
           />
         </div>
       </div>
@@ -61,32 +67,27 @@ export function DashboardGrid() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Requests"
-          value={
-            loading
-              ? "—"
-              : formatNumber(stats?.traffic.requestsLast24h ?? 0)
-          }
+          value={displayValue(loading, stats?.traffic.requestsLast24h)}
           icon={Globe2}
           subtext="Last 24 hours"
         />
         <StatCard
           title="Active IP Blocks"
-          value={loading ? "—" : formatNumber(stats?.activeBlocks ?? 0)}
+          value={displayValue(loading, stats?.activeBlocks)}
           icon={ShieldAlert}
           accent="default"
           subtext="Currently enforced"
         />
         <StatCard
           title="Protected Domains"
-          value="6"
+          value={displayValue(loading, stats?.protectedDomains)}
           icon={Globe2}
           subtext="Active vhosts"
         />
         <StatCard
           title="Avg. Response Time"
-          value="118ms"
+          value={displayValue(loading, stats?.avgResponseTimeMs, "ms")}
           icon={Zap}
-          trend={{ value: "4ms", direction: "down", positiveDirection: "down" }}
           subtext="p50 latency"
         />
       </div>

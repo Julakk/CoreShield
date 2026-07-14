@@ -7,11 +7,13 @@ const config = require('./config');
 const logger = require('./utils/logger');
 const routes = require('./routes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
+const { responseTimeTracker } = require('./middleware/responseTime');
 
 const app = express();
 
 // Security headers
 app.use(helmet());
+app.use(responseTimeTracker);
 
 // Restrict CORS to known dashboard origin(s) only
 app.use(

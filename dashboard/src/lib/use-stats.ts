@@ -8,6 +8,9 @@ const DEMO_STATS: StatsResponse = {
   activeBlocks: 128,
   traffic: { requestsLast24h: 482_930 },
   attacksBlockedLast24h: 3421,
+  protectedDomains: 6,
+  avgResponseTimeMs: 118,
+  cacheRate: 94.2,
 };
 
 export function useStats() {
@@ -29,8 +32,6 @@ export function useStats() {
           setIsDemoData(false);
         }
       } catch (err) {
-        // Backend unreachable or unauthenticated — fall back to demo data
-        // so the UI still renders something meaningful during development.
         if (!cancelled) {
           setStats(DEMO_STATS);
           setIsDemoData(true);
@@ -42,7 +43,7 @@ export function useStats() {
     }
 
     load();
-    const interval = setInterval(load, 30_000); // poll every 30s
+    const interval = setInterval(load, 30_000);
 
     return () => {
       cancelled = true;

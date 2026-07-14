@@ -18,6 +18,9 @@ export interface StatsResponse {
     note?: string;
   };
   attacksBlockedLast24h: number;
+  protectedDomains: number;
+  avgResponseTimeMs: number | null;
+  cacheRate: number | null;
 }
 
 export interface DomainRecord {
