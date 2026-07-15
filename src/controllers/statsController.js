@@ -1,4 +1,5 @@
 const statsService = require('../services/statsService');
+const trafficHistoryStore = require('../services/trafficHistoryStore');
 
 async function getStats(req, res, next) {
   try {
@@ -9,4 +10,12 @@ async function getStats(req, res, next) {
   }
 }
 
-module.exports = { getStats };
+function getHistory(req, res, next) {
+  try {
+    res.json({ history: trafficHistoryStore.getHistory() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getStats, getHistory };

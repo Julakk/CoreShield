@@ -23,6 +23,12 @@ export interface StatsResponse {
   cacheRate: number | null;
 }
 
+export interface HistoryPoint {
+  hour: string;
+  requests: number;
+  avgResponseTimeMs: number | null;
+}
+
 export interface DomainRecord {
   id: string;
   domain: string;
@@ -69,6 +75,7 @@ export const coreShieldApi = {
       body: JSON.stringify({ username, password }),
     }),
   getStats: () => request<StatsResponse>("/stats"),
+  getHistory: () => request<{ history: HistoryPoint[] }>("/stats/history"),
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
   addDomain: (domain: string, upstream?: string) =>
     request<{ domain: DomainRecord }>("/domains", {

@@ -1,3 +1,5 @@
+const trafficHistoryStore = require('../services/trafficHistoryStore');
+
 const WINDOW_SIZE = 500;
 const durations = [];
 
@@ -12,6 +14,8 @@ function responseTimeTracker(req, res, next) {
     if (durations.length > WINDOW_SIZE) {
       durations.shift();
     }
+
+    trafficHistoryStore.recordRequest(durationMs);
   });
 
   next();
