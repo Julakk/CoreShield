@@ -1,21 +1,17 @@
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
+const adminStore = require('./adminStore');
 const { AppError } = require('../middleware/errorHandler');
 
-function safeCompare(a, b) {
-  const bufA = crypto.createHash('sha256').update(String(a)).digest();
-  const bufB = crypto.createHash('sha256').update(String(b)).digest();
-  return crypto.timingSafeEqual(bufA, bufB);
-}
-
 function login(username, password) {
-  if (!config.admin.password) {
-    throw new AppError('Admin login is not configured on this server', 503);
-  }
+  const storedUsername = adminStore.getUsername();
 
-  const usernameMatches = safeCompare(username, config.admin.username);
-  const passwordMatches = safeCompare(password, config.admin.password);
+  const a = Buffer.from(String(username));
+  const b = Buffer.from(String(storedUsername));
+  const usernameMatches =
+    a.length === b.length && require('crypto').timingSafeEqual(a, b);
+
+  const passwordMatches = adminStore.verifyPassword(password);
 
   if (!usernameMatches || !passwordMatches) {
     throw new AppError('Invalid username or password', 401);
@@ -30,4 +26,14 @@ function login(username, password) {
   return { token, expiresIn: config.jwt.expiresIn };
 }
 
-module.exports = { login };
+function changePassword(currentPassword, newPassword) {
+  if (!adminStore.verifyPassword(currentPassword)) {
+    throw new AppError('Current password is incorrect', 401);
+  }
+  if (!newPassword || newPassword.length < 8) {
+    throw new AppError('New password must be at least 8 characters', 400);
+  }
+  adminStore.setPassword(newPassword);
+}
+
+module.exports = { login, changePassword };

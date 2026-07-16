@@ -3,11 +3,8 @@ const logger = require('../utils/logger');
 const { safeExec } = require('../utils/safeExec');
 const { isValidIp, isBlockableIp } = require('../utils/validators');
 const { AppError } = require('../middleware/errorHandler');
+const ipBlockStore = require('./ipBlockStore');
 
-/**
- * Block via CrowdSec's local bouncer/LAPI (preferred — no root shell needed,
- * and CrowdSec already handles decision expiry, dedup, etc.)
- */
 async function blockViaCrowdSec(ip, { duration = '4h', reason = 'manual block via CoreShield' } = {}) {
   const res = await fetch(`${config.crowdsec.apiUrl}/v1/decisions`, {
     method: 'POST',
@@ -34,21 +31,6 @@ async function blockViaCrowdSec(ip, { duration = '4h', reason = 'manual block vi
   return { method: 'crowdsec', ip, duration, reason };
 }
 
-/**
- * Block via iptables. Only used if BLOCK_METHOD=iptables.
- *
- * Rather than calling `iptables` directly as root, this calls a single,
- * narrowly-scoped shell script (scripts/manage_firewall.sh) via sudo. The
- * script does its own strict IP validation and only ever invokes
- * iptables/ip6tables with a fixed, small set of flags — see the sudoers
- * config in scripts/coreshield-sudoers.example for why this bounds the
- * blast radius even if the Node process itself were compromised.
- *
- * Uses execFile with an argument array throughout — ip is never
- * concatenated into a shell string, so it cannot break out of the
- * argument regardless of content. This is defense-in-depth on top of the
- * script's own validation, not a substitute for it.
- */
 async function blockViaIptables(ip) {
   await safeExec(config.firewall.sudoBin, [
     config.firewall.scriptPath,
@@ -71,6 +53,10 @@ async function blockIp(ip, options = {}) {
       ? await blockViaIptables(ip)
       : await blockViaCrowdSec(ip, options);
 
+  if (config.blockMethod === 'iptables') {
+    ipBlockStore.add(ip, { reason: options.reason });
+  }
+
   logger.info('IP blocked', { ...result, actor: options.actor });
   return result;
 }
@@ -86,6 +72,7 @@ async function unblockIp(ip) {
       'unblock',
       ip,
     ]);
+    ipBlockStore.remove(ip);
     logger.info('IP unblocked via iptables', { ip });
     return { method: 'iptables', ip, unblocked: true };
   }
@@ -105,4 +92,31 @@ async function unblockIp(ip) {
   return { method: 'crowdsec', ip, unblocked: true };
 }
 
-module.exports = { blockIp, unblockIp };
+async function listBlockedIps() {
+  if (config.blockMethod === 'iptables') {
+    return ipBlockStore.list();
+  }
+
+  try {
+    const res = await fetch(`${config.crowdsec.apiUrl}/v1/decisions`, {
+      headers: { 'X-Api-Key': config.crowdsec.apiKey },
+    });
+    if (!res.ok) {
+      logger.warn('CrowdSec API returned non-OK status listing decisions', { status: res.status });
+      return [];
+    }
+    const decisions = await res.json();
+    if (!Array.isArray(decisions)) return [];
+    return decisions.map((d) => ({
+      ip: d.value,
+      reason: d.reason || null,
+      blockedAt: d.created_at || null,
+      expiresAt: d.duration || null,
+    }));
+  } catch (err) {
+    logger.warn('CrowdSec unreachable, returning empty block list', { error: err.message });
+    return [];
+  }
+}
+
+module.exports = { blockIp, unblockIp, listBlockedIps };

@@ -6,10 +6,13 @@ import { Topbar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { Globe, Plus, Trash2, Loader2 } from "lucide-react";
 import { coreShieldApi, ApiError, DomainRecord } from "@/lib/api";
 
 export default function DomainsPage() {
+  const { showToast } = useToast();
   const [domains, setDomains] = useState<DomainRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -18,7 +21,9 @@ export default function DomainsPage() {
   const [upstream, setUpstream] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [removingDomain, setRemovingDomain] = useState<string | null>(null);
+
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   async function loadDomains() {
     setLoading(true);
@@ -45,29 +50,33 @@ export default function DomainsPage() {
     setSubmitting(true);
     try {
       await coreShieldApi.addDomain(domain.trim(), upstream.trim() || undefined);
+      showToast(`${domain.trim()} added and Nginx reloaded.`, "success");
       setDomain("");
       setUpstream("");
       await loadDomains();
     } catch (err) {
-      setFormError(
-        err instanceof ApiError ? err.message : "Failed to reach the server"
-      );
+      const msg = err instanceof ApiError ? err.message : "Failed to reach the server";
+      setFormError(msg);
+      showToast(msg, "error");
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleRemove(d: string) {
-    setRemovingDomain(d);
+  async function confirmRemove() {
+    if (!pendingRemove) return;
+    setRemoving(true);
     try {
-      await coreShieldApi.removeDomain(d);
+      await coreShieldApi.removeDomain(pendingRemove);
+      showToast(`${pendingRemove} removed.`, "success");
       await loadDomains();
     } catch (err) {
-      setLoadError(
-        err instanceof ApiError ? err.message : "Failed to remove domain"
-      );
+      const msg = err instanceof ApiError ? err.message : "Failed to remove domain";
+      setLoadError(msg);
+      showToast(msg, "error");
     } finally {
-      setRemovingDomain(null);
+      setRemoving(false);
+      setPendingRemove(null);
     }
   }
 
@@ -162,15 +171,10 @@ export default function DomainsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        disabled={removingDomain === d.domain}
-                        onClick={() => handleRemove(d.domain)}
+                        onClick={() => setPendingRemove(d.domain)}
                         aria-label={`Remove ${d.domain}`}
                       >
-                        {removingDomain === d.domain ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -180,6 +184,17 @@ export default function DomainsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        title={`Remove ${pendingRemove}?`}
+        description="This will remove the Nginx vhost config and reload Nginx. This can't be undone from here."
+        confirmLabel="Remove"
+        variant="danger"
+        loading={removing}
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingRemove(null)}
+      />
     </DashboardShell>
   );
 }

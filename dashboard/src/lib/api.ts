@@ -37,6 +37,13 @@ export interface DomainRecord {
   status: string;
 }
 
+export interface BlockedIpRecord {
+  ip: string;
+  reason: string | null;
+  blockedAt: string | null;
+  expiresAt?: string | null;
+}
+
 class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -68,12 +75,26 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+export interface SystemInfo {
+  username: string;
+  env: string;
+  blockMethod: string;
+  corsOrigins: string[];
+  jwtExpiresIn: string;
+}
+
 export const coreShieldApi = {
   login: (username: string, password: string) =>
     request<{ token: string; expiresIn: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ success: boolean }>("/auth/password", {
+      method: "PATCH",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  getSystemInfo: () => request<SystemInfo>("/auth/system-info"),
   getStats: () => request<StatsResponse>("/stats"),
   getHistory: () => request<{ history: HistoryPoint[] }>("/stats/history"),
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
@@ -82,11 +103,17 @@ export const coreShieldApi = {
       method: "POST",
       body: JSON.stringify({ domain, upstream }),
     }),
+  removeDomain: (domain: string) =>
+    request(`/domains/${encodeURIComponent(domain)}`, { method: "DELETE" }),
+  listBlockedIps: () =>
+    request<{ blocked: BlockedIpRecord[] }>("/security/block-ip"),
   blockIp: (ip: string, reason?: string) =>
     request("/security/block-ip", {
       method: "POST",
       body: JSON.stringify({ ip, reason }),
     }),
+  unblockIp: (ip: string) =>
+    request(`/security/block-ip/${encodeURIComponent(ip)}`, { method: "DELETE" }),
 };
 
 export { ApiError };

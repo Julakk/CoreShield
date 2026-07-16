@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { body } = require('express-validator');
 const authController = require('../controllers/authController');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -22,5 +23,18 @@ router.post(
   ],
   authController.login
 );
+
+router.patch(
+  '/password',
+  authenticate,
+  loginLimiter,
+  [
+    body('currentPassword').isString().notEmpty(),
+    body('newPassword').isString().isLength({ min: 8 }),
+  ],
+  authController.changePassword
+);
+
+router.get('/system-info', authenticate, authController.getSystemInfo);
 
 module.exports = router;

@@ -5,6 +5,8 @@ const securityController = require('../controllers/securityController');
 
 const router = express.Router();
 
+router.get('/block-ip', authenticate, securityController.listBlockedIps);
+
 router.post(
   '/block-ip',
   authenticate,

@@ -144,6 +144,77 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5" />
+                Avg. response time — last 24 hours
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Measured per-hour from real request durations
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {loading ? (
+              <div className="h-48 flex items-center justify-center text-foreground-subtle text-sm gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading history…
+              </div>
+            ) : (
+              <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={history} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f5a623" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="#f5a623" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#22252b" vertical={false} />
+                    <XAxis
+                      dataKey="hour"
+                      tick={{ fill: "#6b6e75", fontSize: 11 }}
+                      axisLine={{ stroke: "#22252b" }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fill: "#6b6e75", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={36}
+                      unit="ms"
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length || payload[0].value == null) return null;
+                        return (
+                          <div className="rounded-md border border-border bg-background-elevated px-3 py-2 shadow-lg">
+                            <p className="text-xs text-foreground-subtle mb-1">{label}</p>
+                            <p className="text-xs font-medium tabular-nums" style={{ color: "#f5a623" }}>
+                              Avg response: {payload[0].value as number}ms
+                            </p>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="avgResponseTimeMs"
+                      name="Avg response time"
+                      stroke="#f5a623"
+                      strokeWidth={2}
+                      fill="url(#latencyGradient)"
+                      connectNulls
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card>
             <CardContent className="py-5">

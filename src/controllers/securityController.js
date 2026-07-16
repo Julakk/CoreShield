@@ -2,6 +2,15 @@ const { validationResult } = require('express-validator');
 const blockService = require('../services/blockService');
 const logger = require('../utils/logger');
 
+async function listBlockedIps(req, res, next) {
+  try {
+    const blocked = await blockService.listBlockedIps();
+    res.json({ blocked });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function blockIp(req, res, next) {
   try {
     const errors = validationResult(req);
@@ -36,4 +45,4 @@ async function unblockIp(req, res, next) {
   }
 }
 
-module.exports = { blockIp, unblockIp };
+module.exports = { listBlockedIps, blockIp, unblockIp };

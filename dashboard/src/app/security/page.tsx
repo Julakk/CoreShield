@@ -6,10 +6,13 @@ import { Topbar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { ShieldAlert, ShieldOff, Loader2, Ban } from "lucide-react";
 import { coreShieldApi, ApiError, BlockedIpRecord } from "@/lib/api";
 
 export default function SecurityPage() {
+  const { showToast } = useToast();
   const [blocked, setBlocked] = useState<BlockedIpRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -18,7 +21,10 @@ export default function SecurityPage() {
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [removingIp, setRemovingIp] = useState<string | null>(null);
+
+  const [pendingBlock, setPendingBlock] = useState<{ ip: string; reason: string } | null>(null);
+  const [pendingUnblock, setPendingUnblock] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
 
   async function loadBlocked() {
     setLoading(true);
@@ -39,35 +45,48 @@ export default function SecurityPage() {
     loadBlocked();
   }, []);
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
+    // Blocking an IP is destructive-ish and easy to mistype — confirm first.
+    setPendingBlock({ ip: ip.trim(), reason: reason.trim() });
+  }
+
+  async function confirmBlock() {
+    if (!pendingBlock) return;
     setSubmitting(true);
+    setWorking(true);
     try {
-      await coreShieldApi.blockIp(ip.trim(), reason.trim() || undefined);
+      await coreShieldApi.blockIp(pendingBlock.ip, pendingBlock.reason || undefined);
+      showToast(`${pendingBlock.ip} blocked.`, "success");
       setIp("");
       setReason("");
       await loadBlocked();
     } catch (err) {
-      setFormError(
-        err instanceof ApiError ? err.message : "Failed to reach the server"
-      );
+      const msg = err instanceof ApiError ? err.message : "Failed to reach the server";
+      setFormError(msg);
+      showToast(msg, "error");
     } finally {
       setSubmitting(false);
+      setWorking(false);
+      setPendingBlock(null);
     }
   }
 
-  async function handleUnblock(targetIp: string) {
-    setRemovingIp(targetIp);
+  async function confirmUnblock() {
+    if (!pendingUnblock) return;
+    setWorking(true);
     try {
-      await coreShieldApi.unblockIp(targetIp);
+      await coreShieldApi.unblockIp(pendingUnblock);
+      showToast(`${pendingUnblock} unblocked.`, "success");
       await loadBlocked();
     } catch (err) {
-      setLoadError(
-        err instanceof ApiError ? err.message : "Failed to unblock IP"
-      );
+      const msg = err instanceof ApiError ? err.message : "Failed to unblock IP";
+      setLoadError(msg);
+      showToast(msg, "error");
     } finally {
-      setRemovingIp(null);
+      setWorking(false);
+      setPendingUnblock(null);
     }
   }
 
@@ -100,11 +119,7 @@ export default function SecurityPage() {
                 className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-foreground-subtle focus:outline-none focus:ring-2 focus:ring-accent/50"
               />
               <Button type="submit" variant="destructive" disabled={submitting}>
-                {submitting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Ban className="w-3.5 h-3.5" />
-                )}
+                <Ban className="w-3.5 h-3.5" />
                 Block IP
               </Button>
             </form>
@@ -163,14 +178,9 @@ export default function SecurityPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        disabled={removingIp === b.ip}
-                        onClick={() => handleUnblock(b.ip)}
+                        onClick={() => setPendingUnblock(b.ip)}
                       >
-                        {removingIp === b.ip ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          "Unblock"
-                        )}
+                        Unblock
                       </Button>
                     </div>
                   </div>
@@ -180,6 +190,28 @@ export default function SecurityPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={pendingBlock !== null}
+        title={`Block ${pendingBlock?.ip}?`}
+        description="This will immediately drop all traffic from this IP address. Make sure it's not your own connection before confirming."
+        confirmLabel="Block IP"
+        variant="danger"
+        loading={working}
+        onConfirm={confirmBlock}
+        onCancel={() => setPendingBlock(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingUnblock !== null}
+        title={`Unblock ${pendingUnblock}?`}
+        description="This IP will be allowed to reach your servers again."
+        confirmLabel="Unblock"
+        variant="default"
+        loading={working}
+        onConfirm={confirmUnblock}
+        onCancel={() => setPendingUnblock(null)}
+      />
     </DashboardShell>
   );
 }
