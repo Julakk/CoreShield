@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { TrafficChartCard, TrafficPoint } from "@/components/dashboard/traffic-chart-card";
+import { QuickActions } from "@/components/dashboard/quick-actions";
 import { useStats } from "@/lib/use-stats";
 import { formatNumber } from "@/lib/format";
 import { ShieldAlert, Zap, Globe2 } from "lucide-react";
@@ -28,11 +30,39 @@ function displayValue(
   return `${formatNumber(value)}${suffix}`;
 }
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 5) return "Working late";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 export function DashboardGrid() {
   const { stats, loading, error, isDemoData } = useStats();
+  const [greeting, setGreeting] = useState("");
+
+  useEffect(() => {
+    setGreeting(getGreeting());
+  }, []);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 animate-in fade-in duration-300">
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">
+            {greeting ? `${greeting}.` : "Welcome back."} Here's what's happening.
+          </h2>
+          <p className="text-xs text-foreground-subtle mt-0.5">
+            {loading
+              ? "Refreshing stats…"
+              : `Last updated ${new Date(stats?.generatedAt ?? Date.now()).toLocaleTimeString()}`}
+          </p>
+        </div>
+      </div>
+
+      <QuickActions />
+
       {isDemoData && !loading && (
         <Badge variant="warning" className="w-fit">
           Showing demo data — backend unreachable{error ? `: ${error}` : ""}
@@ -46,6 +76,7 @@ export function DashboardGrid() {
           <StatCard
             title="Attack Threats Blocked"
             value={displayValue(loading, stats?.attacksBlockedLast24h)}
+            loading={loading}
             icon={ShieldAlert}
             accent="danger"
             subtext="Last 24 hours"
@@ -53,6 +84,7 @@ export function DashboardGrid() {
           <StatCard
             title="Cache Rate"
             value={displayValue(loading, stats?.cacheRate, "%")}
+            loading={loading}
             icon={Zap}
             accent="accent"
             subtext={
@@ -68,12 +100,14 @@ export function DashboardGrid() {
         <StatCard
           title="Total Requests"
           value={displayValue(loading, stats?.traffic.requestsLast24h)}
+          loading={loading}
           icon={Globe2}
           subtext="Last 24 hours"
         />
         <StatCard
           title="Active IP Blocks"
           value={displayValue(loading, stats?.activeBlocks)}
+          loading={loading}
           icon={ShieldAlert}
           accent="default"
           subtext="Currently enforced"
@@ -81,12 +115,14 @@ export function DashboardGrid() {
         <StatCard
           title="Protected Domains"
           value={displayValue(loading, stats?.protectedDomains)}
+          loading={loading}
           icon={Globe2}
           subtext="Active vhosts"
         />
         <StatCard
           title="Avg. Response Time"
           value={displayValue(loading, stats?.avgResponseTimeMs, "ms")}
+          loading={loading}
           icon={Zap}
           subtext="p50 latency"
         />
