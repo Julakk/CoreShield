@@ -9,6 +9,7 @@ import {
   BarChart3,
   ShieldCheck,
   Settings,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { label: "Domains", href: "/domains", icon: Globe },
   { label: "Security", href: "/security", icon: ShieldAlert },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
+  { label: "Audit Log", href: "/audit-log", icon: History },
 ];
 
 export function Sidebar() {

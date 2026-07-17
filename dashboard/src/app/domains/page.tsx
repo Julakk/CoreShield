@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { Globe, Plus, Trash2, Loader2, Lock, Gauge } from "lucide-react";
+import { Globe, Plus, Trash2, Loader2, Lock, Gauge, Download } from "lucide-react";
 import { coreShieldApi, ApiError, DomainRecord } from "@/lib/api";
+import { downloadCsv } from "@/lib/csv-export";
 
 export default function DomainsPage() {
   const { showToast } = useToast();
@@ -173,7 +174,30 @@ export default function DomainsPage() {
               <Globe className="w-3.5 h-3.5" />
               Protected domains
             </CardTitle>
-            <Badge variant="default">{domains.length} total</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="default">{domains.length} total</Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={domains.length === 0}
+                onClick={() =>
+                  downloadCsv(
+                    domains.map((d) => ({
+                      domain: d.domain,
+                      upstream: d.upstream,
+                      rateLimit: d.rateLimit ?? "",
+                      sslIssued: d.sslIssued,
+                      status: d.status,
+                      createdAt: d.createdAt,
+                    })),
+                    `coreshield-domains-${new Date().toISOString().slice(0, 10)}.csv`
+                  )
+                }
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export CSV
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="pt-2">
             {loading ? (

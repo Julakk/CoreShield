@@ -4,6 +4,7 @@ const securityRouter = require('./security');
 const statsRouter = require('./stats');
 const authRouter = require('./auth');
 const publicRouter = require('./public');
+const auditLogRouter = require('./auditLog');
 
 const router = express.Router();
 
@@ -14,5 +15,6 @@ router.use('/auth', authRouter);
 router.use('/domains', domainsRouter);
 router.use('/security', securityRouter);
 router.use('/stats', statsRouter);
+router.use('/audit-log', auditLogRouter);
 
 module.exports = router;

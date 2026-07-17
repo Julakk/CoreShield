@@ -1,6 +1,8 @@
 const { validationResult } = require('express-validator');
 const domainStore = require('../services/domainStore');
 const nginxService = require('../services/nginxService');
+const auditLogStore = require('../services/auditLogStore');
+const discordNotifier = require('../services/discordNotifier');
 const logger = require('../utils/logger');
 const { AppError } = require('../middleware/errorHandler');
 
@@ -37,7 +39,25 @@ async function addDomain(req, res, next) {
       sslIssued: result.sslIssued,
     });
 
-    logger.info('Domain added', { domain, actor: req.user?.sub, sslIssued: result.sslIssued });
+    const actor = req.user?.sub;
+    logger.info('Domain added', { domain, actor, sslIssued: result.sslIssued });
+    auditLogStore.record({
+      actor,
+      action: 'domain.add',
+      target: domain,
+      details: { upstream: record.upstream, rateLimit: result.rateLimit, sslIssued: result.sslIssued },
+    });
+    discordNotifier.notify({
+      title: '🌐 Domain added',
+      description: `**${domain}** is now protected.`,
+      color: 'success',
+      fields: [
+        { name: 'Upstream', value: record.upstream },
+        { name: 'SSL', value: result.sslIssued ? 'Issued' : 'Not issued' },
+        { name: 'By', value: actor || 'unknown' },
+      ],
+    });
+
     res.status(201).json({ domain: record });
   } catch (err) {
     next(err);
@@ -55,7 +75,16 @@ async function removeDomain(req, res, next) {
     await nginxService.removeDomain(domain);
     domainStore.remove(domain);
 
-    logger.info('Domain removed', { domain, actor: req.user?.sub });
+    const actor = req.user?.sub;
+    logger.info('Domain removed', { domain, actor });
+    auditLogStore.record({ actor, action: 'domain.remove', target: domain });
+    discordNotifier.notify({
+      title: '🗑️ Domain removed',
+      description: `**${domain}** is no longer protected.`,
+      color: 'warning',
+      fields: [{ name: 'By', value: actor || 'unknown' }],
+    });
+
     res.json({ domain, removed: true });
   } catch (err) {
     next(err);

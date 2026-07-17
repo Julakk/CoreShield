@@ -46,6 +46,15 @@ export interface BlockedIpRecord {
   expiresAt?: string | null;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  target: string | null;
+  details: Record<string, unknown> | null;
+}
+
 export interface PublicStatus {
   status: string;
   protectedDomains: number;
@@ -108,6 +117,7 @@ export const coreShieldApi = {
   getSystemInfo: () => request<SystemInfo>("/auth/system-info"),
   getStats: () => request<StatsResponse>("/stats"),
   getPublicStatus: () => request<PublicStatus>("/public/status"),
+  getAuditLog: () => request<{ entries: AuditLogEntry[] }>("/audit-log"),
   getHistory: () => request<{ history: HistoryPoint[] }>("/stats/history"),
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
   addDomain: (

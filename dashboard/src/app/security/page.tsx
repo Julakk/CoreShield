@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { ShieldAlert, ShieldOff, Loader2, Ban } from "lucide-react";
+import { ShieldAlert, ShieldOff, Loader2, Ban, Download } from "lucide-react";
+import { downloadCsv } from "@/lib/csv-export";
 import { coreShieldApi, ApiError, BlockedIpRecord } from "@/lib/api";
 
 export default function SecurityPage() {
@@ -137,7 +138,27 @@ export default function SecurityPage() {
               <ShieldAlert className="w-3.5 h-3.5" />
               Currently blocked
             </CardTitle>
-            <Badge variant="danger">{blocked.length} active</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="danger">{blocked.length} active</Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={blocked.length === 0}
+                onClick={() =>
+                  downloadCsv(
+                    blocked.map((b) => ({
+                      ip: b.ip,
+                      reason: b.reason ?? "",
+                      blockedAt: b.blockedAt ?? "",
+                    })),
+                    `coreshield-blocked-ips-${new Date().toISOString().slice(0, 10)}.csv`
+                  )
+                }
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export CSV
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="pt-2">
             {loading ? (
