@@ -44,6 +44,15 @@ export interface BlockedIpRecord {
   expiresAt?: string | null;
 }
 
+export interface PublicStatus {
+  status: string;
+  protectedDomains: number;
+  attacksBlockedLast24h: number;
+  activeIpBlocks: number;
+  avgResponseTimeMs: number | null;
+  generatedAt: string;
+}
+
 class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -96,6 +105,7 @@ export const coreShieldApi = {
     }),
   getSystemInfo: () => request<SystemInfo>("/auth/system-info"),
   getStats: () => request<StatsResponse>("/stats"),
+  getPublicStatus: () => request<PublicStatus>("/public/status"),
   getHistory: () => request<{ history: HistoryPoint[] }>("/stats/history"),
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
   addDomain: (domain: string, upstream?: string) =>
