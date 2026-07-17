@@ -10,7 +10,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 - Site-wide traffic and threat analytics (currently only tracks requests hitting the CoreShield API itself, not Nginx-wide traffic across protected domains).
 - Wire `Cache Rate` and `Total Requests` to a real data source (Nginx cache zone stats, access-log aggregation) — both currently return `null`/"N/A" honestly rather than a fake number, pending that integration.
 - Multi-user auth (currently single-admin login via `ADMIN_USERNAME`/`ADMIN_PASSWORD`, with in-place password changes via `data/admin.json`).
-- Production deployment to a real VPS + domain (`ahmadhosting.my.id`).
+- Production deployment to a real VPS + domain (`ahmadhosting.my.id`), including pointing the public status page at its own subdomain.
+
+## [1.4.0] - 2026-07-17
+
+### Added
+- **Public status page** (`/status`) — a landing-page-style, unauthenticated page anyone can view, showing live aggregate protection stats: domains protected, threats blocked (24h), active IP blocks, and average response time.
+- Backend: `GET /api/v1/public/status` — a new, intentionally unauthenticated endpoint that returns only a curated, safe subset of stats. It never exposes domain names, blocked IP addresses, or any admin/account info — just aggregate counts, so it's safe to share publicly or point a status subdomain at.
+
+### Security
+- The public endpoint was deliberately built as a separate route (`src/routes/public.js`) rather than relaxing auth on the existing `/stats` endpoint, so the set of publicly-exposed fields is explicit and reviewable in one place rather than depending on remembering to filter an authenticated response.
 
 ## [1.3.0] - 2026-07-17
 
@@ -72,4 +81,4 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 
 ## Related repositories
 
-This project lives in the same monorepo as the [CoreShield API](https://github.com/Julakk/CoreShield) — Express backend (domains, IP blocking, stats, auth).
+This project lives in the same monorepo as the [CoreShield API](https://github.com/Julakk/CoreShield) — Express backend (domains, IP blocking, stats, auth, public status).
