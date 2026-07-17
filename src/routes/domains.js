@@ -24,6 +24,14 @@ router.post(
       .trim()
       .matches(/^[a-zA-Z0-9.-]+:\d{1,5}$/)
       .withMessage('upstream must be host:port'),
+    body('rateLimit')
+      .optional()
+      .isFloat({ min: 0.1, max: 10000 })
+      .withMessage('rateLimit must be a positive number (requests/sec)'),
+    body('enableSsl')
+      .optional()
+      .isBoolean()
+      .withMessage('enableSsl must be a boolean'),
   ],
   domainsController.addDomain
 );

@@ -98,7 +98,7 @@ export default function SecurityPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Ban className="w-3.5 h-3.5" />
-              Block an IP address
+              Block an IP or CIDR range
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
@@ -106,7 +106,7 @@ export default function SecurityPage() {
               <input
                 type="text"
                 required
-                placeholder="203.0.113.42"
+                placeholder="203.0.113.42 or 203.0.113.0/24"
                 value={ip}
                 onChange={(e) => setIp(e.target.value)}
                 className="flex-1 h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-foreground-subtle focus:outline-none focus:ring-2 focus:ring-accent/50 font-mono tabular-nums"

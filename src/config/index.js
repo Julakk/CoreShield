@@ -34,6 +34,11 @@ const config = {
     reloadCmd: process.env.NGINX_RELOAD_CMD || 'systemctl reload nginx',
   },
 
+  ssl: {
+    certbotBin: process.env.CERTBOT_BIN || 'certbot',
+    email: process.env.CERTBOT_EMAIL || '',
+  },
+
   crowdsec: {
     apiUrl: process.env.CROWDSEC_BOUNCER_API || 'http://127.0.0.1:8080',
     apiKey: process.env.CROWDSEC_BOUNCER_API_KEY || '',

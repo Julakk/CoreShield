@@ -1,9 +1,13 @@
 const config = require('../config');
 const logger = require('../utils/logger');
 const { safeExec } = require('../utils/safeExec');
-const { isValidIp, isBlockableIp } = require('../utils/validators');
+const { isValidIpOrCidr, isBlockableIp } = require('../utils/validators');
 const { AppError } = require('../middleware/errorHandler');
 const ipBlockStore = require('./ipBlockStore');
+
+function isCidr(value) {
+  return value.includes('/');
+}
 
 async function blockViaCrowdSec(ip, { duration = '4h', reason = 'manual block via CoreShield' } = {}) {
   const res = await fetch(`${config.crowdsec.apiUrl}/v1/decisions`, {
@@ -16,7 +20,7 @@ async function blockViaCrowdSec(ip, { duration = '4h', reason = 'manual block vi
       {
         type: 'ban',
         origin: 'coreshield',
-        scope: 'Ip',
+        scope: isCidr(ip) ? 'Range' : 'Ip',
         value: ip,
         duration,
         reason,
@@ -41,11 +45,11 @@ async function blockViaIptables(ip) {
 }
 
 async function blockIp(ip, options = {}) {
-  if (!isValidIp(ip)) {
-    throw new AppError(`Invalid IP address format: ${ip}`, 400);
+  if (!isValidIpOrCidr(ip)) {
+    throw new AppError(`Invalid IP address or CIDR range: ${ip}`, 400);
   }
   if (!isBlockableIp(ip)) {
-    throw new AppError(`Refusing to block private/reserved IP: ${ip}`, 400);
+    throw new AppError(`Refusing to block private/reserved range: ${ip}`, 400);
   }
 
   const result =
@@ -62,8 +66,8 @@ async function blockIp(ip, options = {}) {
 }
 
 async function unblockIp(ip) {
-  if (!isValidIp(ip)) {
-    throw new AppError(`Invalid IP address format: ${ip}`, 400);
+  if (!isValidIpOrCidr(ip)) {
+    throw new AppError(`Invalid IP address or CIDR range: ${ip}`, 400);
   }
 
   if (config.blockMethod === 'iptables') {

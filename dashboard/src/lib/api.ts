@@ -33,6 +33,8 @@ export interface DomainRecord {
   id: string;
   domain: string;
   upstream: string;
+  rateLimit: number | null;
+  sslIssued: boolean;
   createdAt: string;
   status: string;
 }
@@ -108,10 +110,13 @@ export const coreShieldApi = {
   getPublicStatus: () => request<PublicStatus>("/public/status"),
   getHistory: () => request<{ history: HistoryPoint[] }>("/stats/history"),
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
-  addDomain: (domain: string, upstream?: string) =>
+  addDomain: (
+    domain: string,
+    options?: { upstream?: string; rateLimit?: number; enableSsl?: boolean }
+  ) =>
     request<{ domain: DomainRecord }>("/domains", {
       method: "POST",
-      body: JSON.stringify({ domain, upstream }),
+      body: JSON.stringify({ domain, ...options }),
     }),
   removeDomain: (domain: string) =>
     request(`/domains/${encodeURIComponent(domain)}`, { method: "DELETE" }),

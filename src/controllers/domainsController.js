@@ -19,18 +19,25 @@ async function addDomain(req, res, next) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { domain, upstream } = req.body;
+    const { domain, upstream, rateLimit, enableSsl } = req.body;
 
     if (domainStore.exists(domain)) {
       throw new AppError(`Domain already registered: ${domain}`, 409);
     }
 
-    // Triggers actual Nginx config write + reload
-    await nginxService.addDomain(domain, { upstream });
+    const result = await nginxService.addDomain(domain, {
+      upstream,
+      rateLimit,
+      enableSsl,
+    });
 
-    const record = domainStore.add(domain, { upstream });
+    const record = domainStore.add(domain, {
+      upstream,
+      rateLimit: result.rateLimit,
+      sslIssued: result.sslIssued,
+    });
 
-    logger.info('Domain added', { domain, actor: req.user?.sub });
+    logger.info('Domain added', { domain, actor: req.user?.sub, sslIssued: result.sslIssued });
     res.status(201).json({ domain: record });
   } catch (err) {
     next(err);

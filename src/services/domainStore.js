@@ -1,10 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
 
-/**
- * PLACEHOLDER persistence layer.
- * Replace with a real database (Postgres, MySQL, etc.) before production use.
- * Kept in-memory here purely to keep this example runnable standalone.
- */
 const domains = new Map();
 
 function list() {
@@ -16,6 +11,8 @@ function add(domain, meta = {}) {
     id: uuidv4(),
     domain,
     upstream: meta.upstream || '127.0.0.1:8080',
+    rateLimit: meta.rateLimit || null,
+    sslIssued: meta.sslIssued || false,
     createdAt: new Date().toISOString(),
     status: 'active',
   };
