@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { Globe, Plus, Trash2, Loader2, Lock, Gauge, Download } from "lucide-react";
+import { Globe, Plus, Trash2, Loader2, Lock, Gauge, Download, Search } from "lucide-react";
 import { coreShieldApi, ApiError, DomainRecord } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv-export";
+import { SearchInput } from "@/components/ui/search-input";
 
 export default function DomainsPage() {
   const { showToast } = useToast();
   const [domains, setDomains] = useState<DomainRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const [domain, setDomain] = useState("");
   const [upstream, setUpstream] = useState("");
@@ -46,6 +48,15 @@ export default function DomainsPage() {
   useEffect(() => {
     loadDomains();
   }, []);
+
+  const filteredDomains = domains.filter((d) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      d.domain.toLowerCase().includes(q) ||
+      d.upstream.toLowerCase().includes(q)
+    );
+  });
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -174,15 +185,20 @@ export default function DomainsPage() {
               <Globe className="w-3.5 h-3.5" />
               Protected domains
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="default">{domains.length} total</Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search domains…"
+              />
+              <Badge variant="default">{filteredDomains.length} of {domains.length}</Badge>
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={domains.length === 0}
+                disabled={filteredDomains.length === 0}
                 onClick={() =>
                   downloadCsv(
-                    domains.map((d) => ({
+                    filteredDomains.map((d) => ({
                       domain: d.domain,
                       upstream: d.upstream,
                       rateLimit: d.rateLimit ?? "",
@@ -216,9 +232,16 @@ export default function DomainsPage() {
                   No domains registered yet. Add one above.
                 </p>
               </div>
+            ) : filteredDomains.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-center gap-2">
+                <Search className="w-8 h-8 text-foreground-subtle" />
+                <p className="text-sm text-foreground-muted">
+                  No domains match &quot;{search}&quot;.
+                </p>
+              </div>
             ) : (
               <div className="divide-y divide-border">
-                {domains.map((d) => (
+                {filteredDomains.map((d) => (
                   <div
                     key={d.id}
                     className="flex items-center justify-between py-3 gap-3"

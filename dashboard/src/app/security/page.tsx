@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { ShieldAlert, ShieldOff, Loader2, Ban, Download } from "lucide-react";
+import { ShieldAlert, ShieldOff, Loader2, Ban, Download, Search } from "lucide-react";
 import { downloadCsv } from "@/lib/csv-export";
 import { coreShieldApi, ApiError, BlockedIpRecord } from "@/lib/api";
+import { SearchInput } from "@/components/ui/search-input";
 
 export default function SecurityPage() {
   const { showToast } = useToast();
   const [blocked, setBlocked] = useState<BlockedIpRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const [ip, setIp] = useState("");
   const [reason, setReason] = useState("");
@@ -46,10 +48,18 @@ export default function SecurityPage() {
     loadBlocked();
   }, []);
 
+  const filteredBlocked = blocked.filter((b) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      b.ip.toLowerCase().includes(q) ||
+      (b.reason ?? "").toLowerCase().includes(q)
+    );
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
-    // Blocking an IP is destructive-ish and easy to mistype — confirm first.
     setPendingBlock({ ip: ip.trim(), reason: reason.trim() });
   }
 
@@ -138,15 +148,20 @@ export default function SecurityPage() {
               <ShieldAlert className="w-3.5 h-3.5" />
               Currently blocked
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="danger">{blocked.length} active</Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search IP or reason…"
+              />
+              <Badge variant="danger">{filteredBlocked.length} of {blocked.length}</Badge>
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={blocked.length === 0}
+                disabled={filteredBlocked.length === 0}
                 onClick={() =>
                   downloadCsv(
-                    blocked.map((b) => ({
+                    filteredBlocked.map((b) => ({
                       ip: b.ip,
                       reason: b.reason ?? "",
                       blockedAt: b.blockedAt ?? "",
@@ -177,9 +192,16 @@ export default function SecurityPage() {
                   No IPs currently blocked.
                 </p>
               </div>
+            ) : filteredBlocked.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-center gap-2">
+                <Search className="w-8 h-8 text-foreground-subtle" />
+                <p className="text-sm text-foreground-muted">
+                  No blocked IPs match &quot;{search}&quot;.
+                </p>
+              </div>
             ) : (
               <div className="divide-y divide-border">
-                {blocked.map((b) => (
+                {filteredBlocked.map((b) => (
                   <div
                     key={b.ip}
                     className="flex items-center justify-between py-3"

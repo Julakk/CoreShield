@@ -6,9 +6,10 @@ import { Topbar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { History, Loader2, Download } from "lucide-react";
+import { History, Loader2, Download, Search } from "lucide-react";
 import { coreShieldApi, ApiError, AuditLogEntry } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv-export";
+import { SearchInput } from "@/components/ui/search-input";
 
 const ACTION_LABELS: Record<string, { label: string; variant: "success" | "danger" | "warning" | "default" | "accent" }> = {
   "domain.add": { label: "Domain added", variant: "success" },
@@ -20,10 +21,20 @@ const ACTION_LABELS: Record<string, { label: string; variant: "success" | "dange
   "auth.password_changed": { label: "Password changed", variant: "warning" },
 };
 
+const ACTION_FILTER_OPTIONS = [
+  { value: "all", label: "All actions" },
+  ...Object.entries(ACTION_LABELS).map(([value, meta]) => ({
+    value,
+    label: meta.label,
+  })),
+];
+
 export default function AuditLogPage() {
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [actionFilter, setActionFilter] = useState("all");
 
   async function load() {
     setLoading(true);
@@ -44,9 +55,20 @@ export default function AuditLogPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const filteredEntries = entries.filter((e) => {
+    if (actionFilter !== "all" && e.action !== actionFilter) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      e.actor.toLowerCase().includes(q) ||
+      (e.target ?? "").toLowerCase().includes(q) ||
+      e.action.toLowerCase().includes(q)
+    );
+  });
+
   function handleExport() {
     downloadCsv(
-      entries.map((e) => ({
+      filteredEntries.map((e) => ({
         timestamp: e.timestamp,
         actor: e.actor,
         action: e.action,
@@ -67,13 +89,29 @@ export default function AuditLogPage() {
               <History className="w-3.5 h-3.5" />
               Recent activity
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="default">{entries.length} entries</Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search actor, target…"
+              />
+              <select
+                value={actionFilter}
+                onChange={(e) => setActionFilter(e.target.value)}
+                className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground-muted focus:outline-none focus:ring-2 focus:ring-accent/50"
+              >
+                {ACTION_FILTER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <Badge variant="default">{filteredEntries.length} of {entries.length}</Badge>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleExport}
-                disabled={entries.length === 0}
+                disabled={filteredEntries.length === 0}
               >
                 <Download className="w-3.5 h-3.5" />
                 Export CSV
@@ -97,9 +135,16 @@ export default function AuditLogPage() {
                   No activity recorded yet.
                 </p>
               </div>
+            ) : filteredEntries.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-center gap-2">
+                <Search className="w-8 h-8 text-foreground-subtle" />
+                <p className="text-sm text-foreground-muted">
+                  No entries match your filters.
+                </p>
+              </div>
             ) : (
               <div className="divide-y divide-border">
-                {entries.map((e) => {
+                {filteredEntries.map((e) => {
                   const meta = ACTION_LABELS[e.action] ?? {
                     label: e.action,
                     variant: "default" as const,
