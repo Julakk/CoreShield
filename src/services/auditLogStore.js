@@ -1,7 +1,14 @@
 const { v4: uuidv4 } = require('uuid');
+const { readJson, writeJson } = require('../utils/jsonStore');
 
+const FILE = 'audit-log.json';
 const MAX_ENTRIES = 500;
-const entries = [];
+
+let entries = readJson(FILE, []);
+
+function persist() {
+  writeJson(FILE, entries);
+}
 
 function record({ actor, action, target, details }) {
   const entry = {
@@ -17,6 +24,7 @@ function record({ actor, action, target, details }) {
   if (entries.length > MAX_ENTRIES) {
     entries.length = MAX_ENTRIES;
   }
+  persist();
 
   return entry;
 }

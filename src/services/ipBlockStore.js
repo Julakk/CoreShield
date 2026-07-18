@@ -1,4 +1,12 @@
-const blocks = new Map();
+const { readJson, writeJson } = require('../utils/jsonStore');
+
+const FILE = 'ip-blocks.json';
+
+let blocks = new Map(Object.entries(readJson(FILE, {})));
+
+function persist() {
+  writeJson(FILE, Object.fromEntries(blocks));
+}
 
 function add(ip, meta = {}) {
   const record = {
@@ -7,11 +15,14 @@ function add(ip, meta = {}) {
     blockedAt: new Date().toISOString(),
   };
   blocks.set(ip, record);
+  persist();
   return record;
 }
 
 function remove(ip) {
-  return blocks.delete(ip);
+  const existed = blocks.delete(ip);
+  if (existed) persist();
+  return existed;
 }
 
 function list() {

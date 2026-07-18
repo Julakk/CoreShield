@@ -1,6 +1,13 @@
 const { v4: uuidv4 } = require('uuid');
+const { readJson, writeJson } = require('../utils/jsonStore');
 
-const domains = new Map();
+const FILE = 'domains.json';
+
+let domains = new Map(Object.entries(readJson(FILE, {})));
+
+function persist() {
+  writeJson(FILE, Object.fromEntries(domains));
+}
 
 function list() {
   return Array.from(domains.values());
@@ -17,11 +24,14 @@ function add(domain, meta = {}) {
     status: 'active',
   };
   domains.set(domain, record);
+  persist();
   return record;
 }
 
 function remove(domain) {
-  return domains.delete(domain);
+  const existed = domains.delete(domain);
+  if (existed) persist();
+  return existed;
 }
 
 function exists(domain) {
