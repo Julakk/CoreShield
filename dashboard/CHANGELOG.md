@@ -11,20 +11,31 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 - Wire `Cache Rate` and `Total Requests` to a real data source (Nginx cache zone stats, access-log aggregation).
 - True geo/ASN-based blocking (requires a GeoIP database and Nginx module on the actual VPS). CIDR-range blocking (v1.5.0) is the practical stand-in until then.
 - Multi-user auth with role-based accounts (currently single-admin login).
-- Persistent audit log (currently in-memory, resets on restart).
 - Production deployment to a real VPS + domain (`ahmadhosting.my.id`).
+
+## [1.8.0] - 2026-07-18
+
+### Added
+- **Persistent storage** — domains, blocked IPs, and the audit log are now saved to JSON files under `data/` and survive backend restarts or crashes. Previously all three were in-memory only and reset every time the process restarted.
+- New shared `src/utils/jsonStore.js` utility used by all three stores, with **atomic writes** (write to a temp file, then rename) so a process kill mid-write can never leave a corrupted data file — either the old or new version survives intact, never a half-written one.
+
+### Changed
+- `domainStore.js`, `ipBlockStore.js`, and `auditLogStore.js` now load their state from disk on startup and persist on every mutation, instead of being purely in-memory `Map`/array structures.
+
+### Security
+- `data/*.json` files are gitignored and never committed, same as the existing `admin.json`.
 
 ## [1.7.0] - 2026-07-18
 
 ### Added
-- **Search & filter** on Domains, Security, and Audit Log pages — a search box on each (matching domain/upstream, IP/reason, or actor/action/target respectively), plus an action-type dropdown filter on Audit Log. All client-side, no backend changes required.
-- New reusable `SearchInput` component (`components/ui/search-input.tsx`) used across all three pages.
-- Result counts now show "X of Y" so it's clear when a filter is active, and CSV export respects the current filter (exports what's visible, not the full unfiltered list).
+- **Search & filter** on Domains, Security, and Audit Log pages — a search box on each, plus an action-type dropdown filter on Audit Log. All client-side, no backend changes required.
+- New reusable `SearchInput` component used across all three pages.
+- Result counts now show "X of Y", and CSV export respects the current filter.
 
 ## [1.6.0] - 2026-07-18
 
 ### Added
-- **Discord webhook notifications** — real-time alerts for domain added/removed, IP blocked/unblocked, admin password changed, and failed login attempts. Configured via `DISCORD_WEBHOOK_URL`; silently skipped if unset.
+- **Discord webhook notifications** — real-time alerts for domain added/removed, IP blocked/unblocked, admin password changed, and failed login attempts.
 - **Audit Log page** — new `/audit-log` page and sidebar entry, backed by `GET /api/v1/audit-log`.
 - **CSV export** — "Export CSV" buttons on Domains, Security, and Audit Log pages.
 
@@ -41,7 +52,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 ## [1.4.0] - 2026-07-17
 
 ### Added
-- **Public status page** (`/status`) — unauthenticated page showing live aggregate protection stats via `GET /api/v1/public/status`, exposing only safe curated fields.
+- **Public status page** (`/status`) — unauthenticated page showing live aggregate protection stats via `GET /api/v1/public/status`.
 
 ## [1.3.0] - 2026-07-17
 
@@ -79,4 +90,4 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 
 ## Related repositories
 
-This project lives in the same monorepo as the [CoreShield API](https://github.com/Julakk/CoreShield) — Express backend (domains, IP blocking, stats, auth, audit log, public status, Discord notifications).
+This project lives in the same monorepo as the [CoreShield API](https://github.com/Julakk/CoreShield) — Express backend (domains, IP blocking, stats, auth, audit log, public status, Discord notifications, persistent storage).
