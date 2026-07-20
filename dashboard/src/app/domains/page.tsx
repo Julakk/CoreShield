@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { Globe, Plus, Trash2, Loader2, Lock, Gauge, Download, Search } from "lucide-react";
+import { Globe, Plus, Trash2, Loader2, Lock, Gauge, Download, Search, ShieldCheck } from "lucide-react";
 import { coreShieldApi, ApiError, DomainRecord } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv-export";
 import { SearchInput } from "@/components/ui/search-input";
@@ -24,6 +24,7 @@ export default function DomainsPage() {
   const [upstream, setUpstream] = useState("");
   const [rateLimit, setRateLimit] = useState("");
   const [enableSsl, setEnableSsl] = useState(false);
+  const [enableProtection, setEnableProtection] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -67,17 +68,22 @@ export default function DomainsPage() {
         upstream: upstream.trim() || undefined,
         rateLimit: rateLimit ? Number(rateLimit) : undefined,
         enableSsl: enableSsl || undefined,
+        enableProtection: enableProtection || undefined,
       });
       const sslNote = enableSsl
         ? result.domain.sslIssued
           ? " SSL certificate issued."
           : " SSL issuance failed (check DNS/certbot on the server) — domain is still live over HTTP."
         : "";
-      showToast(`${domain.trim()} added and Nginx reloaded.${sslNote}`, "success");
+      const protectionNote = enableProtection
+        ? " Advanced Protection (WAF + bad-bot blocking + connection limits) is active."
+        : "";
+      showToast(`${domain.trim()} added and Nginx reloaded.${sslNote}${protectionNote}`, "success");
       setDomain("");
       setUpstream("");
       setRateLimit("");
       setEnableSsl(false);
+      setEnableProtection(false);
       await loadDomains();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Failed to reach the server";
@@ -158,7 +164,18 @@ export default function DomainsPage() {
                     className="w-4 h-4 rounded border-border accent-accent"
                   />
                   <Lock className="w-3.5 h-3.5" />
-                  Auto SSL (Let&apos;s Encrypt)
+                  Auto SSL
+                </label>
+
+                <label className="flex items-center gap-2 text-sm text-foreground-muted cursor-pointer select-none px-1">
+                  <input
+                    type="checkbox"
+                    checked={enableProtection}
+                    onChange={(e) => setEnableProtection(e.target.checked)}
+                    className="w-4 h-4 rounded border-border accent-accent"
+                  />
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Advanced Protection
                 </label>
 
                 <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
@@ -170,6 +187,16 @@ export default function DomainsPage() {
                   Add domain
                 </Button>
               </div>
+
+              {enableProtection && (
+                <p className="text-xs text-foreground-subtle bg-accent-muted border border-accent/20 rounded-md px-3 py-2">
+                  Advanced Protection blocks common attack patterns
+                  (SQLi/XSS/path traversal), known scanner tools by
+                  User-Agent, and limits concurrent connections per IP —
+                  Nginx-level WAF-lite, not a substitute for validating
+                  input in your app itself.
+                </p>
+              )}
             </form>
             {formError && (
               <p className="text-xs text-danger bg-danger-muted border border-danger/20 rounded-md px-3 py-2 mt-3">
@@ -203,6 +230,7 @@ export default function DomainsPage() {
                       upstream: d.upstream,
                       rateLimit: d.rateLimit ?? "",
                       sslIssued: d.sslIssued,
+                      protectionEnabled: d.protectionEnabled,
                       status: d.status,
                       createdAt: d.createdAt,
                     })),
@@ -255,7 +283,13 @@ export default function DomainsPage() {
                         {new Date(d.createdAt).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                      {d.protectionEnabled && (
+                        <Badge variant="accent">
+                          <ShieldCheck className="w-3 h-3" />
+                          Protected
+                        </Badge>
+                      )}
                       {d.sslIssued && (
                         <Badge variant="accent">
                           <Lock className="w-3 h-3" />

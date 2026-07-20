@@ -20,6 +20,7 @@ function add(domain, meta = {}) {
     upstream: meta.upstream || '127.0.0.1:8080',
     rateLimit: meta.rateLimit || null,
     sslIssued: meta.sslIssued || false,
+    protectionEnabled: meta.protectionEnabled || false,
     createdAt: new Date().toISOString(),
     status: 'active',
   };

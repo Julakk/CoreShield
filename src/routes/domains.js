@@ -32,6 +32,14 @@ router.post(
       .optional()
       .isBoolean()
       .withMessage('enableSsl must be a boolean'),
+    body('enableProtection')
+      .optional()
+      .isBoolean()
+      .withMessage('enableProtection must be a boolean'),
+    body('maxConnections')
+      .optional()
+      .isInt({ min: 1, max: 100000 })
+      .withMessage('maxConnections must be a positive integer'),
   ],
   domainsController.addDomain
 );

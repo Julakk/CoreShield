@@ -10,22 +10,52 @@ function zoneNameFor(domain) {
   return `z_${domain.replace(/[^a-zA-Z0-9]/g, '_')}`;
 }
 
-function buildVhostConfig(domain, { upstream = '127.0.0.1:8080', rateLimit } = {}) {
-  const rateLimitBlock = rateLimit
-    ? `limit_req_zone $binary_remote_addr zone=${zoneNameFor(domain)}:10m rate=${rateLimit}r/s;\n\n`
+const WAF_RULES = [
+  `if ($query_string ~* "(union.*select|select.*from|insert.*into|drop.*table|update.*set|delete.*from)") { return 403; }`,
+  `if ($query_string ~* "(<script|javascript:|onerror=|onload=)") { return 403; }`,
+  `if ($request_uri ~* "\\.\\./") { return 403; }`,
+  `if ($request_uri ~* "/(\\.env|\\.git/|wp-config\\.php|\\.htpasswd)") { return 403; }`,
+];
+
+const BAD_BOT_UA_PATTERN =
+  'sqlmap|nikto|nmap|masscan|nessus|acunetix|w3af|havij|dirbuster|wpscan';
+
+function buildVhostConfig(
+  domain,
+  { upstream = '127.0.0.1:8080', rateLimit, enableProtection, maxConnections } = {}
+) {
+  const zone = zoneNameFor(domain);
+
+  const rateLimitZone = rateLimit
+    ? `limit_req_zone $binary_remote_addr zone=${zone}:10m rate=${rateLimit}r/s;\n`
+    : '';
+  const rateLimitDirective = rateLimit
+    ? `        limit_req zone=${zone} burst=20 nodelay;\n`
     : '';
 
-  const rateLimitDirective = rateLimit
-    ? `        limit_req zone=${zoneNameFor(domain)} burst=20 nodelay;\n`
+  const connLimit = maxConnections || (enableProtection ? 20 : null);
+  const connLimitZone = connLimit
+    ? `limit_conn_zone $binary_remote_addr zone=conn_${zone}:10m;\n`
+    : '';
+  const connLimitDirective = connLimit
+    ? `        limit_conn conn_${zone} ${connLimit};\n`
+    : '';
+
+  const zonesBlock = rateLimitZone || connLimitZone
+    ? `${rateLimitZone}${connLimitZone}\n`
+    : '';
+
+  const wafBlock = enableProtection
+    ? `\n    # CoreShield WAF-lite: block common attack signatures\n    ${WAF_RULES.join('\n    ')}\n    if ($http_user_agent ~* "(${BAD_BOT_UA_PATTERN})") { return 403; }\n`
     : '';
 
   return `# Managed by CoreShield — do not edit manually
-${rateLimitBlock}server {
+${zonesBlock}server {
     listen 80;
     server_name ${domain};
-
+${wafBlock}
     location / {
-${rateLimitDirective}        proxy_pass http://${upstream};
+${rateLimitDirective}${connLimitDirective}        proxy_pass http://${upstream};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -35,7 +65,7 @@ ${rateLimitDirective}        proxy_pass http://${upstream};
 `;
 }
 
-async function addDomain(domain, { upstream, rateLimit, enableSsl } = {}) {
+async function addDomain(domain, { upstream, rateLimit, enableSsl, enableProtection, maxConnections } = {}) {
   if (!isValidDomain(domain)) {
     throw new AppError(`Invalid domain format: ${domain}`, 400);
   }
@@ -43,6 +73,12 @@ async function addDomain(domain, { upstream, rateLimit, enableSsl } = {}) {
     const n = Number(rateLimit);
     if (!Number.isFinite(n) || n <= 0 || n > 10000) {
       throw new AppError('rateLimit must be a positive number (requests/sec)', 400);
+    }
+  }
+  if (maxConnections !== undefined) {
+    const n = Number(maxConnections);
+    if (!Number.isInteger(n) || n <= 0 || n > 100000) {
+      throw new AppError('maxConnections must be a positive integer', 400);
     }
   }
 
@@ -54,10 +90,15 @@ async function addDomain(domain, { upstream, rateLimit, enableSsl } = {}) {
     throw new AppError('Resolved path escapes sites-available directory', 400);
   }
 
-  const vhostContent = buildVhostConfig(domain, { upstream, rateLimit });
+  const vhostContent = buildVhostConfig(domain, { upstream, rateLimit, enableProtection, maxConnections });
 
   await fs.writeFile(availablePath, vhostContent, { mode: 0o644 });
-  logger.info('Nginx vhost written', { domain, path: availablePath, rateLimit: rateLimit || null });
+  logger.info('Nginx vhost written', {
+    domain,
+    path: availablePath,
+    rateLimit: rateLimit || null,
+    enableProtection: !!enableProtection,
+  });
 
   try {
     await fs.symlink(availablePath, enabledPath);
@@ -83,6 +124,7 @@ async function addDomain(domain, { upstream, rateLimit, enableSsl } = {}) {
     enabled: true,
     rateLimit: rateLimit || null,
     sslIssued,
+    protectionEnabled: !!enableProtection,
   };
 }
 

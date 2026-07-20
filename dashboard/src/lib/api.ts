@@ -35,6 +35,7 @@ export interface DomainRecord {
   upstream: string;
   rateLimit: number | null;
   sslIssued: boolean;
+  protectionEnabled: boolean;
   createdAt: string;
   status: string;
 }
@@ -122,7 +123,13 @@ export const coreShieldApi = {
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
   addDomain: (
     domain: string,
-    options?: { upstream?: string; rateLimit?: number; enableSsl?: boolean }
+    options?: {
+      upstream?: string;
+      rateLimit?: number;
+      enableSsl?: boolean;
+      enableProtection?: boolean;
+      maxConnections?: number;
+    }
   ) =>
     request<{ domain: DomainRecord }>("/domains", {
       method: "POST",

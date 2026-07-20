@@ -21,7 +21,7 @@ async function addDomain(req, res, next) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { domain, upstream, rateLimit, enableSsl } = req.body;
+    const { domain, upstream, rateLimit, enableSsl, enableProtection, maxConnections } = req.body;
 
     if (domainStore.exists(domain)) {
       throw new AppError(`Domain already registered: ${domain}`, 409);
@@ -31,21 +31,29 @@ async function addDomain(req, res, next) {
       upstream,
       rateLimit,
       enableSsl,
+      enableProtection,
+      maxConnections,
     });
 
     const record = domainStore.add(domain, {
       upstream,
       rateLimit: result.rateLimit,
       sslIssued: result.sslIssued,
+      protectionEnabled: result.protectionEnabled,
     });
 
     const actor = req.user?.sub;
-    logger.info('Domain added', { domain, actor, sslIssued: result.sslIssued });
+    logger.info('Domain added', { domain, actor, sslIssued: result.sslIssued, protectionEnabled: result.protectionEnabled });
     auditLogStore.record({
       actor,
       action: 'domain.add',
       target: domain,
-      details: { upstream: record.upstream, rateLimit: result.rateLimit, sslIssued: result.sslIssued },
+      details: {
+        upstream: record.upstream,
+        rateLimit: result.rateLimit,
+        sslIssued: result.sslIssued,
+        protection: result.protectionEnabled,
+      },
     });
     discordNotifier.notify({
       title: '🌐 Domain added',
@@ -54,6 +62,7 @@ async function addDomain(req, res, next) {
       fields: [
         { name: 'Upstream', value: record.upstream },
         { name: 'SSL', value: result.sslIssued ? 'Issued' : 'Not issued' },
+        { name: 'WAF Protection', value: result.protectionEnabled ? 'Enabled' : 'Off' },
         { name: 'By', value: actor || 'unknown' },
       ],
     });
