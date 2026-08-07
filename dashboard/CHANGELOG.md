@@ -7,30 +7,35 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 ## [Unreleased]
 
 ### Planned
-- Site-wide traffic and threat analytics (currently only tracks requests hitting the CoreShield API itself, not Nginx-wide traffic across protected domains).
-- Wire `Cache Rate` and `Total Requests` to a real data source (Nginx cache zone stats, access-log aggregation).
-- True geo/ASN-based blocking and real DDoS scrubbing (requires infrastructure a single VPS can't provide — GeoIP database, anycast network). CIDR-range blocking and connection limiting are the practical stand-ins.
+- Real traffic parsing per-domain from Nginx access logs (currently Analytics only tracks requests hitting the CoreShield API itself).
+- True geo/ASN-based blocking (requires a GeoIP database and Nginx module on the actual VPS). CIDR-range blocking remains the practical stand-in.
 - Multi-user auth with role-based accounts (currently single-admin login).
-- Production deployment to a real VPS + domain (`ahmadhosting.my.id`).
+- Production deployment to a VPS (previous deployment on a Linode instance was rolled back — see v2.0.0 notes).
+
+## [2.0.0] - 2026-08-06
+
+### Added
+- **"Protect an existing domain" mode** — a new toggle on the Domains page for domains that already have their own Nginx vhost managed by another application (e.g. a control panel like Pterodactyl). Instead of creating a competing `server{}` block, CoreShield generates a standalone protection snippet (WAF-lite rules, rate limiting, connection limiting) and shows step-by-step manual wiring instructions — it **never** auto-edits a config file it didn't create, and never auto-reloads Nginx for this mode. Backend: `POST /api/v1/domains/protect-existing`, `src/services/nginxService.js#protectExistingDomain`.
+- **GeoIP country lookup for blocked IPs** — the Security page now shows the country (name + code) for each blocked IP, via a new `src/services/geoLookup.js` using the free ip-api.com API with in-memory caching. Read-only and informational only — does not block or allow traffic by country.
+- `DomainRecord` now tracks a `mode` field (`"managed"` vs `"existing"`) and, for existing-domain protection, a `snippetPath`.
+
+### Fixed
+- `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` in production — Express wasn't configured to trust the Nginx reverse proxy in front of it, causing `express-rate-limit` to reject requests carrying an `X-Forwarded-For` header. Fixed with `app.set('trust proxy', 1)`.
+
+### Notes
+- This release was built and validated during a real VPS deployment (Linode, alongside an existing Pterodactyl panel). The "protect existing domain" feature was specifically driven by that deployment: the correct approach for `panel.<domain>` turned out to be snippet + manual wiring rather than CoreShield's normal automated vhost creation, since the domain already had its own certbot-managed config.
+- The `protectExistingDomain` Nginx config generation was verified with a real `nginx -t` against a reconstructed copy of the actual `pterodactyl.conf` structure before being shipped.
+- That specific VPS deployment was later torn down (the app was removed cleanly — Pterodactyl was never affected) with plans to redeploy on a new VPS; this release captures the code produced during that deployment.
 
 ## [1.9.0] - 2026-07-20
 
 ### Added
-- **Advanced Protection** (WAF-lite) — a new "Advanced Protection" checkbox on Add Domain that enables, per domain:
-  - Pattern-based blocking of common attack signatures (SQL injection, XSS, path traversal, sensitive-file probing like `.env`/`.git`/`wp-config.php`) at the Nginx level.
-  - Known scanner/exploit-tool User-Agent blocking (sqlmap, nikto, nmap, masscan, nessus, acunetix, w3af, havij, dirbuster, wpscan).
-  - Per-IP connection limiting (`limit_conn`), configurable via `maxConnections`, defaulting to 20 concurrent connections when Advanced Protection is on.
-- Domains list now shows a "Protected" badge for domains with Advanced Protection enabled.
-- Discord domain-added notifications now include WAF protection status.
-
-### Notes
-- This is inspired by Gcore/Cloudflare-style protection, but is honestly scoped: it's Nginx-level pattern matching and connection limiting, not a full WAF engine (ModSecurity) or real network-level DDoS scrubbing — those require infrastructure beyond a single application/VPS. It catches the large majority of unsophisticated/automated scanning traffic, which is most of what hits a typical server.
-- The generated Nginx config (rate limiting, connection limiting, and WAF rules together) was validated with a real `nginx -t` during development, not just manual review.
+- **Advanced Protection** (WAF-lite) — pattern-based blocking of common attack signatures, known scanner User-Agent blocking, and per-IP connection limiting, enabled via a checkbox on Add Domain.
 
 ## [1.8.0] - 2026-07-18
 
 ### Added
-- **Persistent storage** — domains, blocked IPs, and the audit log are now saved to JSON files under `data/` and survive backend restarts or crashes, via a new `src/utils/jsonStore.js` utility with atomic writes.
+- **Persistent storage** — domains, blocked IPs, and the audit log are saved to JSON files under `data/` and survive backend restarts, via `src/utils/jsonStore.js` with atomic writes.
 
 ## [1.7.0] - 2026-07-18
 
@@ -40,16 +45,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 ## [1.6.0] - 2026-07-18
 
 ### Added
-- **Discord webhook notifications** for domain/IP/password events and failed logins.
-- **Audit Log page** backed by `GET /api/v1/audit-log`.
-- **CSV export** on Domains, Security, and Audit Log pages.
+- **Discord webhook notifications**, **Audit Log page**, **CSV export** on Domains, Security, and Audit Log pages.
 
 ## [1.5.0] - 2026-07-18
 
 ### Added
-- **Per-domain rate limiting** via Nginx `limit_req_zone`/`limit_req`.
-- **Automatic SSL via Let's Encrypt** — "Auto SSL" checkbox triggers `certbot --nginx` on domain add.
-- **CIDR-range IP blocking** across both iptables and CrowdSec modes.
+- **Per-domain rate limiting**, **Automatic SSL via Let's Encrypt**, **CIDR-range IP blocking**.
 
 ## [1.4.0] - 2026-07-17
 
@@ -59,10 +60,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 ## [1.3.0] - 2026-07-17
 
 ### Added
-- Full UI/UX polish pass on login page and Account Home.
-- Change password, system info, list blocked IPs endpoints.
-- Functional Settings, Security, and Domains pages with confirmation dialogs and toast notifications.
-- Analytics page gained a second chart: average response time per hour.
+- Full UI/UX polish pass, change password/system info endpoints, functional Settings/Security/Domains pages, second Analytics chart.
 
 ### Security
 - Admin password stored as a salted PBKDF2 hash, never plaintext.
@@ -84,4 +82,4 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 
 ## Related repositories
 
-This project lives in the same monorepo as the [CoreShield API](https://github.com/Julakk/CoreShield) — Express backend (domains, IP blocking, stats, auth, audit log, public status, Discord notifications, persistent storage, WAF-lite protection).
+This project lives in the same monorepo as the [CoreShield API](https://github.com/Julakk/CoreShield) — Express backend (domains, IP blocking, stats, auth, audit log, public status, Discord notifications, persistent storage, WAF-lite protection, GeoIP lookup, existing-domain protection).
