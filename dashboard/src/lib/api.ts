@@ -1,22 +1,44 @@
-/**
- * Thin client for the CoreShield backend API (the Express app built earlier).
- *
- * NEXT_PUBLIC_API_URL must point at your backend, e.g. http://localhost:4000/api/v1
- * NEXT_PUBLIC_* vars are exposed to the browser at build time, so never put
- * secrets here — the JWT itself should come from your auth flow / session,
- * not be hardcoded in the frontend.
- */
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token =
+    typeof window !== "undefined" ? window.localStorage.getItem("coreshield_token") : null;
+
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (!res.ok) {
+    let message = "Request failed";
+    try {
+      const body = await res.json();
+      message = body.error || body.errors?.[0]?.msg || message;
+    } catch {
+      message = res.statusText;
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  return res.json();
+}
 
 export interface StatsResponse {
   generatedAt: string;
   activeBlocks: number;
-  traffic: {
-    requestsLast24h: number | null;
-    note?: string;
-  };
+  traffic: { requestsLast24h: number | null; note?: string };
   attacksBlockedLast24h: number;
   protectedDomains: number;
   avgResponseTimeMs: number | null;
@@ -29,22 +51,13 @@ export interface HistoryPoint {
   avgResponseTimeMs: number | null;
 }
 
-export interface DomainRecord {
-  id: string;
-  domain: string;
-  upstream: string;
-  rateLimit: number | null;
-  sslIssued: boolean;
-  protectionEnabled: boolean;
-  createdAt: string;
+export interface PublicStatus {
   status: string;
-}
-
-export interface BlockedIpRecord {
-  ip: string;
-  reason: string | null;
-  blockedAt: string | null;
-  expiresAt?: string | null;
+  protectedDomains: number;
+  attacksBlockedLast24h: number;
+  activeIpBlocks: number;
+  avgResponseTimeMs: number | null;
+  generatedAt: string;
 }
 
 export interface AuditLogEntry {
@@ -56,52 +69,34 @@ export interface AuditLogEntry {
   details: Record<string, unknown> | null;
 }
 
-export interface PublicStatus {
-  status: string;
-  protectedDomains: number;
-  attacksBlockedLast24h: number;
-  activeIpBlocks: number;
-  avgResponseTimeMs: number | null;
-  generatedAt: string;
-}
-
-class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  // In a real app, pull this from your auth/session layer (e.g. next-auth,
-  // a cookie-based session, etc.) — never hardcode a token in source.
-  const token =
-    typeof window !== "undefined" ? window.localStorage.getItem("coreshield_token") : null;
-
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new ApiError(body?.error || `Request failed (${res.status})`, res.status);
-  }
-
-  return res.json();
-}
-
 export interface SystemInfo {
   username: string;
   env: string;
   blockMethod: string;
   corsOrigins: string[];
   jwtExpiresIn: string;
+}
+
+export interface DomainRecord {
+  id: string;
+  domain: string;
+  mode: "managed" | "existing";
+  upstream: string | null;
+  rateLimit: number | null;
+  sslIssued: boolean;
+  protectionEnabled: boolean;
+  snippetPath: string | null;
+  createdAt: string;
+  status: string;
+}
+
+export interface BlockedIpRecord {
+  ip: string;
+  reason: string | null;
+  blockedAt: string | null;
+  expiresAt?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
 }
 
 export const coreShieldApi = {
@@ -116,11 +111,16 @@ export const coreShieldApi = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
   getSystemInfo: () => request<SystemInfo>("/auth/system-info"),
+
   getStats: () => request<StatsResponse>("/stats"),
-  getPublicStatus: () => request<PublicStatus>("/public/status"),
-  getAuditLog: () => request<{ entries: AuditLogEntry[] }>("/audit-log"),
   getHistory: () => request<{ history: HistoryPoint[] }>("/stats/history"),
+
+  getPublicStatus: () => request<PublicStatus>("/public/status"),
+
+  getAuditLog: () => request<{ entries: AuditLogEntry[] }>("/audit-log"),
+
   listDomains: () => request<{ domains: DomainRecord[] }>("/domains"),
+
   addDomain: (
     domain: string,
     options?: {
@@ -135,17 +135,35 @@ export const coreShieldApi = {
       method: "POST",
       body: JSON.stringify({ domain, ...options }),
     }),
+
+  protectExistingDomain: (
+    domain: string,
+    options?: { rateLimit?: number; enableProtection?: boolean; maxConnections?: number }
+  ) =>
+    request<{
+      domain: DomainRecord;
+      snippetPath: string;
+      zoneSnippetPath: string | null;
+      instructions: string[];
+    }>("/domains/protect-existing", {
+      method: "POST",
+      body: JSON.stringify({ domain, ...options }),
+    }),
+
   removeDomain: (domain: string) =>
-    request(`/domains/${encodeURIComponent(domain)}`, { method: "DELETE" }),
-  listBlockedIps: () =>
-    request<{ blocked: BlockedIpRecord[] }>("/security/block-ip"),
+    request<{ domain: string; removed: boolean; warning?: string }>(
+      `/domains/${encodeURIComponent(domain)}`,
+      { method: "DELETE" }
+    ),
+
+  listBlockedIps: () => request<{ blocked: BlockedIpRecord[] }>("/security/block-ip"),
+
   blockIp: (ip: string, reason?: string) =>
     request("/security/block-ip", {
       method: "POST",
       body: JSON.stringify({ ip, reason }),
     }),
+
   unblockIp: (ip: string) =>
     request(`/security/block-ip/${encodeURIComponent(ip)}`, { method: "DELETE" }),
 };
-
-export { ApiError };

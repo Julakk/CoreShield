@@ -53,7 +53,8 @@ export default function SecurityPage() {
     if (!q) return true;
     return (
       b.ip.toLowerCase().includes(q) ||
-      (b.reason ?? "").toLowerCase().includes(q)
+      (b.reason ?? "").toLowerCase().includes(q) ||
+      (b.country ?? "").toLowerCase().includes(q)
     );
   });
 
@@ -152,7 +153,7 @@ export default function SecurityPage() {
               <SearchInput
                 value={search}
                 onChange={setSearch}
-                placeholder="Search IP or reason…"
+                placeholder="Search IP, reason, country…"
               />
               <Badge variant="danger">{filteredBlocked.length} of {blocked.length}</Badge>
               <Button
@@ -164,6 +165,7 @@ export default function SecurityPage() {
                     filteredBlocked.map((b) => ({
                       ip: b.ip,
                       reason: b.reason ?? "",
+                      country: b.country ?? "",
                       blockedAt: b.blockedAt ?? "",
                     })),
                     `coreshield-blocked-ips-${new Date().toISOString().slice(0, 10)}.csv`
@@ -207,9 +209,17 @@ export default function SecurityPage() {
                     className="flex items-center justify-between py-3"
                   >
                     <div>
-                      <p className="text-sm font-medium text-foreground font-mono tabular-nums">
-                        {b.ip}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground font-mono tabular-nums">
+                          {b.ip}
+                        </p>
+                        {b.country && (
+                          <Badge variant="default">
+                            {b.countryCode ? `${b.countryCode} · ` : ""}
+                            {b.country}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-foreground-subtle">
                         {b.reason || "No reason given"}
                         {b.blockedAt &&

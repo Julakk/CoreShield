@@ -2,7 +2,6 @@ const { v4: uuidv4 } = require('uuid');
 const { readJson, writeJson } = require('../utils/jsonStore');
 
 const FILE = 'domains.json';
-
 let domains = new Map(Object.entries(readJson(FILE, {})));
 
 function persist() {
@@ -17,10 +16,12 @@ function add(domain, meta = {}) {
   const record = {
     id: uuidv4(),
     domain,
-    upstream: meta.upstream || '127.0.0.1:8080',
+    mode: meta.mode || 'managed',
+    upstream: meta.upstream || null,
     rateLimit: meta.rateLimit || null,
     sslIssued: meta.sslIssued || false,
     protectionEnabled: meta.protectionEnabled || false,
+    snippetPath: meta.snippetPath || null,
     createdAt: new Date().toISOString(),
     status: 'active',
   };

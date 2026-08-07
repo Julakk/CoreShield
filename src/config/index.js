@@ -1,9 +1,5 @@
 require('dotenv').config();
 
-/**
- * Central, validated configuration.
- * Never hardcode secrets or paths here — everything sensitive comes from env vars.
- */
 function required(name, fallback) {
   const val = process.env[name] ?? fallback;
   if (val === undefined) {
@@ -30,6 +26,7 @@ const config = {
     sitesAvailable: required('NGINX_SITES_AVAILABLE', '/etc/nginx/sites-available'),
     sitesEnabled: required('NGINX_SITES_ENABLED', '/etc/nginx/sites-enabled'),
     reloadCmd: process.env.NGINX_RELOAD_CMD || 'systemctl reload nginx',
+    snippetsDir: process.env.NGINX_SNIPPETS_DIR || '/etc/nginx/coreshield-snippets',
   },
 
   ssl: {

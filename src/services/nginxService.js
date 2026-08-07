@@ -65,6 +65,37 @@ ${rateLimitDirective}${connLimitDirective}        proxy_pass http://${upstream};
 `;
 }
 
+function buildProtectionSnippet(domain, { rateLimit, enableProtection, maxConnections } = {}) {
+  const zone = zoneNameFor(domain);
+
+  const rateLimitZone = rateLimit
+    ? `limit_req_zone $binary_remote_addr zone=${zone}:10m rate=${rateLimit}r/s;\n`
+    : '';
+  const connLimit = maxConnections || (enableProtection ? 20 : null);
+  const connLimitZone = connLimit
+    ? `limit_conn_zone $binary_remote_addr zone=conn_${zone}:10m;\n`
+    : '';
+
+  const zoneDeclarations = `${rateLimitZone}${connLimitZone}`;
+
+  const wafLines = enableProtection
+    ? `    # CoreShield WAF-lite: block common attack signatures\n    ${WAF_RULES.join('\n    ')}\n    if ($http_user_agent ~* "(${BAD_BOT_UA_PATTERN})") { return 403; }\n`
+    : '';
+  const rateLimitDirective = rateLimit ? `    limit_req zone=${zone} burst=20 nodelay;\n` : '';
+  const connLimitDirective = connLimit ? `    limit_conn conn_${zone} ${connLimit};\n` : '';
+
+  const serverBlockLines = `${wafLines}${rateLimitDirective}${connLimitDirective}`;
+
+  return {
+    zoneDeclarations: zoneDeclarations
+      ? `# CoreShield zone declarations for ${domain} — must live in http{} context.\n# Add this block near the top of /etc/nginx/nginx.conf, inside the http {} block.\n${zoneDeclarations}`
+      : null,
+    serverBlockSnippet: serverBlockLines
+      ? `# CoreShield protection rules for ${domain}.\n# Add this as a single line inside the existing server {} block:\n#   include /etc/nginx/coreshield-snippets/${domain}.conf;\n${serverBlockLines}`
+      : '# Advanced Protection was not enabled — nothing to include.',
+  };
+}
+
 async function addDomain(domain, { upstream, rateLimit, enableSsl, enableProtection, maxConnections } = {}) {
   if (!isValidDomain(domain)) {
     throw new AppError(`Invalid domain format: ${domain}`, 400);
@@ -128,6 +159,52 @@ async function addDomain(domain, { upstream, rateLimit, enableSsl, enableProtect
   };
 }
 
+async function protectExistingDomain(domain, { rateLimit, enableProtection, maxConnections } = {}) {
+  if (!isValidDomain(domain)) {
+    throw new AppError(`Invalid domain format: ${domain}`, 400);
+  }
+  if (!enableProtection && !rateLimit && !maxConnections) {
+    throw new AppError('At least one protection option must be enabled', 400);
+  }
+
+  const snippetDir = config.nginx.snippetsDir;
+  await fs.mkdir(snippetDir, { recursive: true, mode: 0o755 });
+
+  const { zoneDeclarations, serverBlockSnippet } = buildProtectionSnippet(domain, {
+    rateLimit,
+    enableProtection,
+    maxConnections,
+  });
+
+  const snippetPath = path.join(snippetDir, `${domain}.conf`);
+  await fs.writeFile(snippetPath, serverBlockSnippet, { mode: 0o644 });
+
+  let zoneSnippetPath = null;
+  if (zoneDeclarations) {
+    zoneSnippetPath = path.join(snippetDir, `${domain}.zones.conf`);
+    await fs.writeFile(zoneSnippetPath, zoneDeclarations, { mode: 0o644 });
+  }
+
+  logger.info('Protection snippet generated for existing domain', { domain, snippetPath });
+
+  return {
+    domain,
+    snippetPath,
+    zoneSnippetPath,
+    rateLimit: rateLimit || null,
+    protectionEnabled: !!enableProtection,
+    maxConnections: maxConnections || null,
+    instructions: [
+      zoneSnippetPath
+        ? `1. Add the contents of ${zoneSnippetPath} inside your http{} block in nginx.conf (once).`
+        : null,
+      `${zoneSnippetPath ? '2' : '1'}. Add this line inside the existing server{} block for ${domain}: include ${snippetPath};`,
+      `${zoneSnippetPath ? '3' : '2'}. Run: nginx -t`,
+      `${zoneSnippetPath ? '4' : '3'}. Only if that succeeds, run: systemctl reload nginx`,
+    ].filter(Boolean),
+  };
+}
+
 async function issueSslCertificate(domain) {
   if (!config.ssl.email) {
     throw new AppError('CERTBOT_EMAIL is not configured on this server', 400);
@@ -170,4 +247,27 @@ async function removeDomain(domain) {
   return { domain, removed: true };
 }
 
-module.exports = { addDomain, removeDomain, buildVhostConfig };
+async function removeProtectionSnippet(domain) {
+  if (!isValidDomain(domain)) {
+    throw new AppError(`Invalid domain format: ${domain}`, 400);
+  }
+  const snippetDir = config.nginx.snippetsDir;
+  await fs.rm(path.join(snippetDir, `${domain}.conf`), { force: true });
+  await fs.rm(path.join(snippetDir, `${domain}.zones.conf`), { force: true });
+
+  logger.info('Protection snippet files removed (Nginx NOT reloaded — remove the include line manually first)', { domain });
+  return {
+    domain,
+    removed: true,
+    warning: `Snippet files deleted, but you must manually remove the "include" line from the existing vhost for ${domain}, then run nginx -t and reload.`,
+  };
+}
+
+module.exports = {
+  addDomain,
+  removeDomain,
+  buildVhostConfig,
+  protectExistingDomain,
+  removeProtectionSnippet,
+  buildProtectionSnippet,
+};

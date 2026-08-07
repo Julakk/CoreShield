@@ -10,6 +10,7 @@ const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 const { responseTimeTracker } = require('./middleware/responseTime');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Security headers
 app.use(helmet());
