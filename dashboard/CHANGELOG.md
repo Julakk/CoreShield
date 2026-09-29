@@ -12,6 +12,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) co
 - Multi-user auth with role-based accounts (currently single-admin login).
 - Production deployment to a VPS (previous deployment on a Linode instance was rolled back — see v2.0.0 notes).
 
+## [2.1.0] - 2026-09-29
+
+### Changed
+- **Domain storage moved to SQLite** — domains are now stored in a SQLite database (built-in `node:sqlite`, no native dependencies; requires Node.js 22.13 or newer) at `DB_PATH` (default `data/coreshield.db`) instead of `data/domains.json`. The `domainStore` interface is unchanged. An existing `domains.json` is imported automatically on first start if the table is empty, and databases from an older schema are migrated in place (new `mode` and `snippetPath` columns, nullable `upstream`).
+- Dashboard stat cards now describe what they actually measure: "Avg. Response Time" is now "API Response Time" (average of the last 500 API requests), "Attack Threats Blocked" is labelled "Active CrowdSec decisions", and "Total Requests" shows "Not configured yet" until real traffic parsing exists.
+- README rewritten to match the current code (auth, data folder, environment variables, production notes, MIT license).
+
+### Security
+- Changing the admin password now revokes every token issued before the change.
+- PBKDF2 iterations for the admin password raised from 100,000 to 600,000; existing hashes are upgraded transparently on the next successful login.
+- JWT verification is restricted to the HS256 algorithm.
+
 ## [2.0.0] - 2026-08-06
 
 ### Added
