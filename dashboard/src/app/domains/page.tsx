@@ -227,7 +227,7 @@ export default function DomainsPage() {
                   downloadCsv(
                     filteredDomains.map((d) => ({
                       domain: d.domain,
-                      upstream: d.upstream,
+                      upstream: d.upstream ?? "",
                       rateLimit: d.rateLimit ?? "",
                       sslIssued: d.sslIssued,
                       protectionEnabled: d.protectionEnabled,
@@ -279,7 +279,7 @@ export default function DomainsPage() {
                         {d.domain}
                       </p>
                       <p className="text-xs text-foreground-subtle tabular-nums">
-                        {d.upstream} · added{" "}
+                        {d.upstream ?? "no upstream"} · added{" "}
                         {new Date(d.createdAt).toLocaleDateString()}
                       </p>
                     </div>
