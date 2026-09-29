@@ -22,7 +22,7 @@ const BAD_BOT_UA_PATTERN =
 
 function buildVhostConfig(
   domain,
-  { upstream = '127.0.0.1:8080', rateLimit, enableProtection, maxConnections } = {}
+  { upstream = '127.0.0.1:8080', rateLimit, enableProtection, maxConnections, accessLogPath } = {}
 ) {
   const zone = zoneNameFor(domain);
 
@@ -52,7 +52,7 @@ function buildVhostConfig(
   return `# Managed by CoreShield — do not edit manually
 ${zonesBlock}server {
     listen 80;
-    server_name ${domain};
+    server_name ${domain};${accessLogPath ? `\n    access_log ${accessLogPath} combined;` : ''}
 ${wafBlock}
     location / {
 ${rateLimitDirective}${connLimitDirective}        proxy_pass http://${upstream};
@@ -96,6 +96,21 @@ function buildProtectionSnippet(domain, { rateLimit, enableProtection, maxConnec
   };
 }
 
+// Per-domain access log hanya diaktifkan kalau foldernya sudah ada:
+// nginx menolak config yang menunjuk ke folder yang tidak ada.
+async function resolveAccessLogPath(domain) {
+  const dir = config.nginx.logDir;
+  if (!dir || !/^[A-Za-z0-9_\/.\-]+$/.test(dir)) return null;
+  try {
+    const st = await fs.stat(dir);
+    if (!st.isDirectory()) return null;
+  } catch {
+    logger.warn('Nginx log directory not found; per-domain access log disabled', { dir });
+    return null;
+  }
+  return path.join(dir, `${domain}.access.log`);
+}
+
 async function addDomain(domain, { upstream, rateLimit, enableSsl, enableProtection, maxConnections } = {}) {
   if (!isValidDomain(domain)) {
     throw new AppError(`Invalid domain format: ${domain}`, 400);
@@ -121,7 +136,8 @@ async function addDomain(domain, { upstream, rateLimit, enableSsl, enableProtect
     throw new AppError('Resolved path escapes sites-available directory', 400);
   }
 
-  const vhostContent = buildVhostConfig(domain, { upstream, rateLimit, enableProtection, maxConnections });
+  const accessLogPath = await resolveAccessLogPath(domain);
+  const vhostContent = buildVhostConfig(domain, { upstream, rateLimit, enableProtection, maxConnections, accessLogPath });
 
   await fs.writeFile(availablePath, vhostContent, { mode: 0o644 });
   logger.info('Nginx vhost written', {

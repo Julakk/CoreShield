@@ -27,6 +27,7 @@ const config = {
     sitesEnabled: required('NGINX_SITES_ENABLED', '/etc/nginx/sites-enabled'),
     reloadCmd: process.env.NGINX_RELOAD_CMD || 'systemctl reload nginx',
     snippetsDir: process.env.NGINX_SNIPPETS_DIR || '/etc/nginx/coreshield-snippets',
+    logDir: process.env.NGINX_LOG_DIR || '/var/log/nginx/coreshield',
   },
 
   ssl: {
