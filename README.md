@@ -79,7 +79,7 @@ See `dashboard/CHANGELOG.md` for version history and `dashboard/README.md` for m
 - Run the backend under a **least-privilege system user**, granted access only to the specific firewall script via sudoers — never run as root.
 - Never commit `.env` or `.env.local` — both are gitignored. Keep real secrets only on the server that runs the service, not on a development machine.
 - Back up the `data/` folder (domains database and admin credentials).
-- Some dashboard stat cards (for example Cache Rate and Avg. Response Time) may still show placeholder values; check them against real backend fields before going live.
+- Traffic (requests in the last 24h) and Cache Rate are not wired to a data source yet and show as empty; "attacks blocked" currently reflects active CrowdSec decisions only.
 
 ## License
 

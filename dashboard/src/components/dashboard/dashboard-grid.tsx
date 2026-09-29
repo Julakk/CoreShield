@@ -79,7 +79,7 @@ export function DashboardGrid() {
             loading={loading}
             icon={ShieldAlert}
             accent="danger"
-            subtext="Last 24 hours"
+            subtext="Active CrowdSec decisions"
           />
           <StatCard
             title="Cache Rate"
@@ -102,7 +102,7 @@ export function DashboardGrid() {
           value={displayValue(loading, stats?.traffic.requestsLast24h)}
           loading={loading}
           icon={Globe2}
-          subtext="Last 24 hours"
+          subtext={stats?.traffic.requestsLast24h == null && !loading ? "Not configured yet" : "Last 24 hours"}
         />
         <StatCard
           title="Active IP Blocks"
@@ -120,11 +120,11 @@ export function DashboardGrid() {
           subtext="Active vhosts"
         />
         <StatCard
-          title="Avg. Response Time"
+          title="API Response Time"
           value={displayValue(loading, stats?.avgResponseTimeMs, "ms")}
           loading={loading}
           icon={Zap}
-          subtext="p50 latency"
+          subtext="Average, last 500 requests"
         />
       </div>
     </div>
