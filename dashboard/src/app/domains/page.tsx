@@ -55,7 +55,7 @@ export default function DomainsPage() {
     if (!q) return true;
     return (
       d.domain.toLowerCase().includes(q) ||
-      d.upstream.toLowerCase().includes(q)
+      (d.upstream ?? "").toLowerCase().includes(q)
     );
   });
 
