@@ -111,7 +111,41 @@ async function resolveAccessLogPath(domain) {
   return path.join(dir, `${domain}.access.log`);
 }
 
-async function addDomain(domain, { upstream, rateLimit, enableSsl, enableProtection, maxConnections } = {}) {
+// Pengaman: jangan menimpa vhost yang sudah ada, dan bersihkan file kalau langkah apa pun gagal.
+async function addDomain(domain, opts = {}) {
+  if (!isValidDomain(domain)) {
+    throw new AppError(`Invalid domain format: ${domain}`, 400);
+  }
+  const fileName = `${domain}.conf`;
+  const availablePath = path.join(config.nginx.sitesAvailable, fileName);
+  const enabledPath = path.join(config.nginx.sitesEnabled, fileName);
+
+  const exists = (p) => fs.lstat(p).then(() => true, () => false);
+  if ((await exists(availablePath)) || (await exists(enabledPath))) {
+    throw new AppError(
+      `An Nginx config for ${domain} already exists; use "protect existing domain" instead`,
+      409
+    );
+  }
+
+  try {
+    return await addDomainInner(domain, opts);
+  } catch (err) {
+    await fs.rm(enabledPath, { force: true });
+    await fs.rm(availablePath, { force: true });
+    try {
+      await safeExec('nginx', ['-t']);
+      const [bin, ...args] = config.nginx.reloadCmd.split(' ');
+      await safeExec(bin, args);
+    } catch (reloadErr) {
+      logger.warn('Nginx reload after rollback failed', { domain, error: reloadErr.message });
+    }
+    logger.warn('addDomain rolled back', { domain, error: err.message });
+    throw err;
+  }
+}
+
+async function addDomainInner(domain, { upstream, rateLimit, enableSsl, enableProtection, maxConnections } = {}) {
   if (!isValidDomain(domain)) {
     throw new AppError(`Invalid domain format: ${domain}`, 400);
   }
