@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const logger = require('../utils/logger');
+const adminStore = require('../services/adminStore');
 
 /**
  * Verifies a Bearer JWT on protected routes.
@@ -15,7 +16,13 @@ function authenticate(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, config.jwt.secret);
+    const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] });
+
+    // Token yang diterbitkan sebelum password terakhir diganti tidak berlaku lagi
+    if ((payload.iat || 0) < adminStore.getPasswordChangedAt()) {
+      throw new Error('Token issued before last password change');
+    }
+
     req.user = payload; // { sub, role, ... }
     next();
   } catch (err) {
