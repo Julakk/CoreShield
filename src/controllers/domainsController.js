@@ -25,7 +25,8 @@ async function addDomain(req, res, next) {
     const result = await nginxService.addDomain(domain, { upstream, rateLimit, enableSsl, enableProtection, maxConnections });
     const record = domainStore.add(domain, {
       mode: 'managed',
-      upstream,
+      upstream: upstream || '127.0.0.1:8080',
+      maxConnections: maxConnections || null,
       rateLimit: result.rateLimit,
       sslIssued: result.sslIssued,
       protectionEnabled: result.protectionEnabled,
@@ -47,7 +48,7 @@ async function addDomain(req, res, next) {
       ],
     });
 
-    res.status(201).json({ domain: record });
+    res.status(201).json({ domain: record, sslError: result.sslError || null });
   } catch (err) {
     next(err);
   }
@@ -120,4 +121,29 @@ async function removeDomain(req, res, next) {
   }
 }
 
-module.exports = { listDomains, addDomain, removeDomain, protectExistingDomain };
+async function enableSsl(req, res, next) {
+  try {
+    const { domain } = req.params;
+    const record = domainStore.get(domain);
+    if (!record) throw new AppError(`Domain not found: ${domain}`, 404);
+    if (record.mode !== 'managed') throw new AppError('SSL can only be enabled for managed domains', 400);
+    if (record.sslIssued) throw new AppError(`SSL is already enabled for ${domain}`, 409);
+
+    await nginxService.enableSsl(domain, record);
+    const updated = domainStore.update(domain, { sslIssued: true });
+
+    const actor = req.user?.sub;
+    logger.info('SSL enabled', { domain, actor });
+    auditLogStore.record({ actor, action: 'domain.ssl_enabled', target: domain });
+    discordNotifier.notify({
+      title: '🔒 SSL enabled', description: `HTTPS is now active for **${domain}**.`, color: 'success',
+      fields: [{ name: 'By', value: actor || 'unknown' }],
+    });
+
+    res.json({ domain: updated });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listDomains, addDomain, removeDomain, protectExistingDomain, enableSsl };

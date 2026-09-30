@@ -6,6 +6,10 @@ const { readJson } = require('../utils/jsonStore');
 
 const LEGACY_FILE = 'domains.json';
 const DB_PATH = path.resolve(process.env.DB_PATH || 'data/coreshield.db');
+const UPDATABLE = [
+  'mode', 'upstream', 'rateLimit', 'sslIssued', 'protectionEnabled',
+  'maxConnections', 'snippetPath', 'status',
+];
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
@@ -21,15 +25,19 @@ const tableSql = (name) => `
     rateLimit          TEXT,
     sslIssued          INTEGER NOT NULL DEFAULT 0,
     protectionEnabled  INTEGER NOT NULL DEFAULT 0,
+    maxConnections     INTEGER,
     snippetPath        TEXT,
     createdAt          TEXT NOT NULL,
     status             TEXT NOT NULL DEFAULT 'active'
   );
 `;
 
-// Migrasi dari skema lama (tanpa kolom mode/snippetPath, upstream NOT NULL)
-const cols = db.prepare('PRAGMA table_info(domains)').all().map((c) => c.name);
-if (cols.length && !cols.includes('mode')) {
+const columns = () => db.prepare('PRAGMA table_info(domains)').all().map((c) => c.name);
+
+if (columns().length === 0) {
+  db.exec(tableSql('domains'));
+} else if (!columns().includes('mode')) {
+  // Skema lama (sebelum kolom mode/snippetPath): bangun ulang tabel
   db.exec(`
     BEGIN;
     ALTER TABLE domains RENAME TO domains_old;
@@ -42,18 +50,21 @@ if (cols.length && !cols.includes('mode')) {
     COMMIT;
   `);
 }
-if (!cols.length) db.exec(tableSql('domains'));
+if (!columns().includes('maxConnections')) {
+  db.exec('ALTER TABLE domains ADD COLUMN maxConnections INTEGER');
+}
 
 const stmt = {
   list: db.prepare('SELECT * FROM domains ORDER BY createdAt'),
+  get: db.prepare('SELECT * FROM domains WHERE domain = ?'),
   exists: db.prepare('SELECT 1 FROM domains WHERE domain = ?'),
   remove: db.prepare('DELETE FROM domains WHERE domain = ?'),
   count: db.prepare('SELECT COUNT(*) AS n FROM domains'),
   insert: db.prepare(`
     INSERT OR REPLACE INTO domains
       (id, domain, mode, upstream, rateLimit, sslIssued, protectionEnabled,
-       snippetPath, createdAt, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       maxConnections, snippetPath, createdAt, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
 };
 
@@ -66,6 +77,7 @@ function fromRow(row) {
     rateLimit: row.rateLimit ? JSON.parse(row.rateLimit) : null,
     sslIssued: !!row.sslIssued,
     protectionEnabled: !!row.protectionEnabled,
+    maxConnections: row.maxConnections ?? null,
     snippetPath: row.snippetPath,
     createdAt: row.createdAt,
     status: row.status,
@@ -77,11 +89,12 @@ function insertRecord(r) {
     r.id,
     r.domain,
     r.mode,
-    r.upstream,
+    r.upstream ?? null,
     r.rateLimit == null ? null : JSON.stringify(r.rateLimit),
     r.sslIssued ? 1 : 0,
     r.protectionEnabled ? 1 : 0,
-    r.snippetPath,
+    r.maxConnections ?? null,
+    r.snippetPath ?? null,
     r.createdAt,
     r.status,
   );
@@ -99,6 +112,7 @@ if (stmt.count.get().n === 0) {
       rateLimit: r.rateLimit || null,
       sslIssued: !!r.sslIssued,
       protectionEnabled: !!r.protectionEnabled,
+      maxConnections: r.maxConnections ?? null,
       snippetPath: r.snippetPath || null,
       createdAt: r.createdAt || new Date().toISOString(),
       status: r.status || 'active',
@@ -110,6 +124,11 @@ function list() {
   return stmt.list.all().map(fromRow);
 }
 
+function get(domain) {
+  const row = stmt.get.get(domain);
+  return row ? fromRow(row) : null;
+}
+
 function add(domain, meta = {}) {
   const record = {
     id: uuidv4(),
@@ -119,12 +138,24 @@ function add(domain, meta = {}) {
     rateLimit: meta.rateLimit || null,
     sslIssued: meta.sslIssued || false,
     protectionEnabled: meta.protectionEnabled || false,
+    maxConnections: meta.maxConnections || null,
     snippetPath: meta.snippetPath || null,
     createdAt: new Date().toISOString(),
     status: 'active',
   };
   insertRecord(record);
   return record;
+}
+
+function update(domain, patch = {}) {
+  const current = get(domain);
+  if (!current) return null;
+  const next = { ...current };
+  for (const key of UPDATABLE) {
+    if (key in patch) next[key] = patch[key];
+  }
+  insertRecord(next);
+  return next;
 }
 
 function remove(domain) {
@@ -135,4 +166,4 @@ function exists(domain) {
   return !!stmt.exists.get(domain);
 }
 
-module.exports = { list, add, remove, exists };
+module.exports = { list, get, add, update, remove, exists };

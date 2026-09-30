@@ -13,6 +13,8 @@
 
 coreshield ALL=(root) NOPASSWD: /opt/coreshield/scripts/manage_firewall.sh block *
 coreshield ALL=(root) NOPASSWD: /opt/coreshield/scripts/manage_firewall.sh unblock *
+coreshield ALL=(root) NOPASSWD: /opt/coreshield/scripts/issue_cert.sh delete *
+coreshield ALL=(root) NOPASSWD: /opt/coreshield/scripts/issue_cert.sh issue *
 
 # Why this is safe:
 # - The user can ONLY run this specific script at this specific absolute path.

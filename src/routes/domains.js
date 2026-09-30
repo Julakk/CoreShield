@@ -25,6 +25,8 @@ router.post('/protect-existing', authenticate, authorize('admin', 'operator'), [
   body('maxConnections').optional().isInt({ min: 1, max: 100000 }),
 ], domainsController.protectExistingDomain);
 
+router.post('/:domain/ssl', authenticate, authorize('admin', 'operator'), domainsController.enableSsl);
+
 router.delete('/:domain', authenticate, authorize('admin'), domainsController.removeDomain);
 
 module.exports = router;

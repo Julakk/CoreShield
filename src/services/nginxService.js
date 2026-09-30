@@ -1,5 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
+const dns = require('dns').promises;
 const config = require('../config');
 const logger = require('../utils/logger');
 const { safeExec } = require('../utils/safeExec');
@@ -22,7 +23,7 @@ const BAD_BOT_UA_PATTERN =
 
 function buildVhostConfig(
   domain,
-  { upstream = '127.0.0.1:8080', rateLimit, enableProtection, maxConnections, accessLogPath } = {}
+  { upstream = '127.0.0.1:8080', rateLimit, enableProtection, maxConnections, accessLogPath, ssl } = {}
 ) {
   const zone = zoneNameFor(domain);
 
@@ -49,19 +50,54 @@ function buildVhostConfig(
     ? `\n    # CoreShield WAF-lite: block common attack signatures\n    ${WAF_RULES.join('\n    ')}\n    if ($http_user_agent ~* "(${BAD_BOT_UA_PATTERN})") { return 403; }\n`
     : '';
 
-  return `# Managed by CoreShield — do not edit manually
-${zonesBlock}server {
-    listen 80;
-    server_name ${domain};${accessLogPath ? `\n    access_log ${accessLogPath} combined;` : ''}
-${wafBlock}
-    location / {
+  const acmeLocation = `    location ^~ /.well-known/acme-challenge/ {
+        root ${ACME_ROOT};
+        default_type text/plain;
+    }
+`;
+  const proxyLocation = `    location / {
 ${rateLimitDirective}${connLimitDirective}        proxy_pass http://${upstream};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+`;
+  const logLine = accessLogPath ? `    access_log ${accessLogPath} combined;\n` : '';
+
+  if (!ssl) {
+    return `# Managed by CoreShield — do not edit manually
+${zonesBlock}server {
+    listen 80;
+    server_name ${domain};
+${logLine}${wafBlock}
+${acmeLocation}
+${proxyLocation}}
+`;
+  }
+
+  return `# Managed by CoreShield — do not edit manually
+${zonesBlock}server {
+    listen 80;
+    server_name ${domain};
+
+${acmeLocation}
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
+
+server {
+    listen 443 ssl http2;
+    server_name ${domain};
+    ssl_certificate ${ssl.certPath};
+    ssl_certificate_key ${ssl.keyPath};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:CoreShieldSSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+${logLine}${wafBlock}
+${proxyLocation}}
 `;
 }
 
@@ -111,6 +147,108 @@ async function resolveAccessLogPath(domain) {
   return path.join(dir, `${domain}.access.log`);
 }
 
+const ACME_ROOT = '/var/www/coreshield-acme';
+
+function reloadNginx() {
+  const [bin, ...args] = config.nginx.reloadCmd.split(' ');
+  return safeExec(bin, args);
+}
+
+// Pastikan SSL memungkinkan SEBELUM ada file yang dibuat (lebih murah daripada rollback).
+async function assertSslReady(domain) {
+  if (!config.ssl.email) {
+    throw new AppError('CERTBOT_EMAIL is not configured on this server', 400);
+  }
+  let addresses;
+  try {
+    addresses = await dns.resolve4(domain);
+  } catch {
+    throw new AppError(
+      `DNS for ${domain} does not resolve yet. Point its A record to this server first.`,
+      400
+    );
+  }
+  if (config.ssl.serverIp && !addresses.includes(config.ssl.serverIp)) {
+    throw new AppError(
+      `DNS for ${domain} points to ${addresses.join(', ')}, not to this server (${config.ssl.serverIp}).`,
+      400
+    );
+  }
+}
+
+// vhost HTTP (dengan lokasi ACME) -> terbitkan sertifikat -> vhost HTTPS. Rollback kalau gagal.
+async function applySsl(domain, opts) {
+  const availablePath = path.join(config.nginx.sitesAvailable, `${domain}.conf`);
+  const previous = await fs.readFile(availablePath, 'utf8');
+  const accessLogPath = await resolveAccessLogPath(domain);
+  const base = { ...opts, accessLogPath };
+  const name = domain.toLowerCase();
+
+  try {
+    await fs.writeFile(availablePath, buildVhostConfig(domain, base));
+    await testNginxConfig();
+    await reloadNginx();
+
+    await safeExec(config.ssl.sudoBin, [config.ssl.scriptPath, 'issue', domain], { timeout: 180000 });
+
+    await fs.writeFile(
+      availablePath,
+      buildVhostConfig(domain, {
+        ...base,
+        ssl: {
+          certPath: `/etc/letsencrypt/live/${name}/fullchain.pem`,
+          keyPath: `/etc/letsencrypt/live/${name}/privkey.pem`,
+        },
+      })
+    );
+    await testNginxConfig();
+    await reloadNginx();
+
+    logger.info('SSL enabled', { domain });
+    return true;
+  } catch (err) {
+    await fs.writeFile(availablePath, previous);
+    try {
+      await testNginxConfig();
+      await reloadNginx();
+    } catch (restoreErr) {
+      logger.warn('Nginx reload after SSL rollback failed', { domain, error: restoreErr.message });
+    }
+    throw err;
+  }
+}
+
+// Aktifkan SSL untuk domain managed yang sudah ada.
+async function enableSsl(domain, record = {}) {
+  if (!isValidDomain(domain)) {
+    throw new AppError(`Invalid domain format: ${domain}`, 400);
+  }
+  await assertSslReady(domain);
+  try {
+    await applySsl(domain, {
+      upstream: record.upstream || undefined,
+      rateLimit: record.rateLimit || undefined,
+      enableProtection: !!record.protectionEnabled,
+      maxConnections: record.maxConnections || undefined,
+    });
+  } catch (err) {
+    if (err.isOperational) throw err;
+    const detail = String(err.message).split('\n').slice(0, 3).join(' ');
+    throw new AppError(`SSL setup failed: ${detail}`, 502);
+  }
+  return { domain, sslIssued: true };
+}
+
+// Dipanggil setelah vhost dihapus. Gagal = tidak masalah (mis. domain tidak pernah punya SSL).
+async function deleteCertificate(domain) {
+  try {
+    await safeExec(config.ssl.sudoBin, [config.ssl.scriptPath, 'delete', domain], { timeout: 60000 });
+    logger.info('SSL certificate deleted', { domain });
+  } catch (err) {
+    logger.info('No CoreShield certificate deleted', { domain, reason: String(err.message).split('\n')[0] });
+  }
+}
+
 // Pengaman: jangan menimpa vhost yang sudah ada, dan bersihkan file kalau langkah apa pun gagal.
 async function addDomain(domain, opts = {}) {
   if (!isValidDomain(domain)) {
@@ -119,6 +257,8 @@ async function addDomain(domain, opts = {}) {
   const fileName = `${domain}.conf`;
   const availablePath = path.join(config.nginx.sitesAvailable, fileName);
   const enabledPath = path.join(config.nginx.sitesEnabled, fileName);
+
+  if (opts.enableSsl) await assertSslReady(domain);
 
   const exists = (p) => fs.lstat(p).then(() => true, () => false);
   if ((await exists(availablePath)) || (await exists(enabledPath))) {
@@ -195,8 +335,14 @@ async function addDomainInner(domain, { upstream, rateLimit, enableSsl, enablePr
   logger.info('Nginx reloaded after domain add', { domain });
 
   let sslIssued = false;
+  let sslError = null;
   if (enableSsl) {
-    sslIssued = await issueSslCertificate(domain);
+    try {
+      sslIssued = await applySsl(domain, { upstream, rateLimit, enableProtection, maxConnections });
+    } catch (err) {
+      sslError = err.message.split('\n').slice(0, 3).join(' ');
+      logger.warn('SSL setup failed; domain stays on HTTP', { domain, error: sslError });
+    }
   }
 
   return {
@@ -205,6 +351,7 @@ async function addDomainInner(domain, { upstream, rateLimit, enableSsl, enablePr
     enabled: true,
     rateLimit: rateLimit || null,
     sslIssued,
+    sslError,
     protectionEnabled: !!enableProtection,
   };
 }
@@ -293,6 +440,7 @@ async function removeDomain(domain) {
   const [reloadBin, ...reloadArgs] = config.nginx.reloadCmd.split(' ');
   await safeExec(reloadBin, reloadArgs);
 
+  await deleteCertificate(domain);
   logger.info('Domain removed and nginx reloaded', { domain });
   return { domain, removed: true };
 }
@@ -314,6 +462,7 @@ async function removeProtectionSnippet(domain) {
 }
 
 module.exports = {
+  enableSsl,
   addDomain,
   removeDomain,
   buildVhostConfig,

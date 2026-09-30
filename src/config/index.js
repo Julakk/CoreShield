@@ -33,6 +33,9 @@ const config = {
   ssl: {
     certbotBin: process.env.CERTBOT_BIN || 'certbot',
     email: process.env.CERTBOT_EMAIL || '',
+    scriptPath: process.env.CERT_SCRIPT_PATH || '/opt/coreshield/scripts/issue_cert.sh',
+    sudoBin: process.env.CERT_SUDO_BIN || 'sudo',
+    serverIp: process.env.SERVER_PUBLIC_IP || '',
   },
 
   crowdsec: {
